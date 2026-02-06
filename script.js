@@ -2,11 +2,11 @@ var SPEED = 0.004;
 var CAMERA_LAG = 0.9;
 var COLLISION = 1.1;
 var BOUNCE = 0.7;
-var mapscale = 5;
+var mapscale = 50;
 var VR = false;
 var BOUNCE_CORRECT = 0.01;
 var WALL_SIZE = 1.2;
-var MOUNTAIN_DIST = 250;
+var MOUNTAIN_DIST = 2500;
 var OOB_DIST = 200;
 var LAPS = 3;
 function MODS(){
