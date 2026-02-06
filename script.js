@@ -26,11 +26,7 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-
 var database = firebase.database();
-var connectedS = firebase;
-var connectedN = 0;
-
 firebase.auth().signInAnonymously().catch(console.error);
 
 
