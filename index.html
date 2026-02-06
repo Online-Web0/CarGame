@@ -1,208 +1,167 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <!-- thanks to https://realfavicongenerator.net/ -->
-    <link rel="apple-touch-icon" sizes="180x180" href="favicons/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="favicons/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="194x194" href="favicons/favicon-194x194.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="favicons/android-chrome-192x192.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="favicons/favicon-16x16.png">
-    <link rel="manifest" href="favicons/manifest.json">
-    <link rel="mask-icon" href="favicons/safari-pinned-tab.svg" color="#5bbad5">
-    <meta name="theme-color" content="#ffffff">
+	<head>
+		<!-- thanks to https://realfavicongenerator.net/ -->
+		<link rel="apple-touch-icon" sizes="180x180" href="favicons/apple-touch-icon.png">
+		<link rel="icon" type="image/png" sizes="32x32" href="favicons/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="194x194" href="favicons/favicon-194x194.png">
+		<link rel="icon" type="image/png" sizes="192x192" href="favicons/android-chrome-192x192.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="favicons/favicon-16x16.png">
+		<link rel="manifest" href="favicons/manifest.json">
+		<link rel="mask-icon" href="favicons/safari-pinned-tab.svg" color="#5bbad5">
+		<meta name="theme-color" content="#ffffff">
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1">
+		<meta name="referrer" content="no-referrer-when-downgrade">
+		<link href="https://fonts.googleapis.com/css?family=Monoton|Press+Start+2P" rel="stylesheet">
+		<link href="style.css" rel="stylesheet">
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/86/three.min.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-app.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-database.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-auth.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-analytics.js"></script>
+		<script src="https://jchabin.github.io/VR-ThreeJS-Test/ThreeJS/DeviceOrientationControls.js"></script>
+		<script src="https://jchabin.github.io/VR-ThreeJS-Test/ThreeJS/StereoEffect.js"></script>
+		<script data-ad-client="ca-pub-8222390470642566" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+		<title>Online Racing Game!</title>
+	</head>
+	<body>
+	<!-- Replace your existing <div id="trackcode"...> with this (leave it empty). -->
+<div id="trackcode" class="data"></div>
 
-    <!-- iOS / PWA -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script>
+/*
+Format per map string:
+WALLS | START/CP LINES | TREES | SIGNS | MAP_SCRIPT
+- WALLS: "x1,y1/x2,y2 ..." (space-separated segments)
+- START/CP: first segment = finish line (blue), second = checkpoint line (red)
+- TREES: "x,y ..." (space-separated)
+- SIGNS: "x,y,z/deg ..."  (x,z scaled by mapscale in your code; y is literal height-ish)
+- MAP_SCRIPT: anything JS-safe (evaluated). Kept as comment.
+*/
 
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1">
-    <meta name="referrer" content="no-referrer-when-downgrade">
+const MAPS = [
+  // MAP 1 — Canyon Rectangle (fast, wide lanes)
+  (
+    "-30,-20/30,-20 30,-20/30,20 30,20/-30,20 -30,20/-30,-20 " +                 // outer
+    "-20,-10/20,-10 20,-10/20,10 20,10/-20,10 -20,10/-20,-10 " +                // inner
+    "-5,-10/5,-5 5,-5/-5,0 -5,0/5,5 5,5/-5,10 " +                                // mid obstacles
+    "| " +
+    "-25,0/-20,0 25,0/20,0 " +                                                    // finish, checkpoint
+    "| " +
+    "-24,18 -20,16 -12,14 -6,16 6,16 12,14 20,16 24,18 " +
+    "-24,-18 -18,-16 -10,-14 0,-16 10,-14 18,-16 24,-18 " +
+    "| " +
+    "-22,1,18/90 -10,1,12/45 0,1,10/0 10,1,12/-45 22,1,18/-90 " +
+    "-22,1,-18/90 -10,1,-12/135 0,1,-10/180 10,1,-12/-135 22,1,-18/-90 " +
+    "| " +
+    "/*map1*/"
+  ),
 
-    <link href="https://fonts.googleapis.com/css?family=Monoton|Press+Start+2P" rel="stylesheet">
-    <link href="style.css" rel="stylesheet">
+  // MAP 2 — Offset Diamond Loop (more technical)
+  (
+    "-35,0/-15,22 -15,22/15,22 15,22/35,0 35,0/15,-22 15,-22/-15,-22 -15,-22/-35,0 " + // outer diamond
+    "-25,0/-10,15 -10,15/10,15 10,15/25,0 25,0/10,-15 10,-15/-10,-15 -10,-15/-25,0 " + // inner diamond
+    "-6,8/6,2 6,2/-6,-4 -6,-4/6,-10 " +                                                     // S blockers
+    "| " +
+    "-12,0/-10,2 12,0/10,-2 " +
+    "| " +
+    "-30,0 -26,8 -20,14 -10,18 0,19 10,18 20,14 26,8 30,0 " +
+    "-26,-8 -20,-14 -10,-18 0,-19 10,-18 20,-14 26,-8 " +
+    "| " +
+    "-20,1,10/35 0,1,18/0 20,1,10/-35 0,1,-18/180 " +
+    "-8,1,0/90 8,1,0/-90 " +
+    "| " +
+    "/*map2*/"
+  ),
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/86/three.min.js"></script>
+  // MAP 3 — Twin Straights + Hairpins (drag-race feel + corners)
+  (
+    "-40,-18/40,-18 40,-18/40,-6 40,-6/-40,-6 -40,-6/-40,-18 " +             // bottom straight outer
+    "-40,6/40,6 40,6/40,18 40,18/-40,18 -40,18/-40,6 " +                     // top straight outer
+    "-30,-14/30,-14 30,-14/30,-10 30,-10/-30,-10 -30,-10/-30,-14 " +         // bottom straight inner
+    "-30,10/30,10 30,10/30,14 30,14/-30,14 -30,14/-30,10 " +                 // top straight inner
+    "-40,-6/-35,6 -35,6/-40,18 " +                                            // left connector
+    "40,-6/35,6 35,6/40,18 " +                                                // right connector
+    "-40,-18/-35,-6 -35,-6/-40,6 " +                                          // left connector 2
+    "40,-18/35,-6 35,-6/40,6 " +                                              // right connector 2
+    "| " +
+    "-32,0/-28,0 32,0/28,0 " +
+    "| " +
+    "-38,0 -36,10 -34,16 -30,18 30,18 34,16 36,10 38,0 36,-10 34,-16 30,-18 -30,-18 -34,-16 -36,-10 " +
+    "| " +
+    "-35,1,0/90 35,1,0/-90 0,1,17/0 0,1,-17/180 " +
+    "| " +
+    "/*map3*/"
+  ),
 
-    <script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-database.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-analytics.js"></script>
+  // MAP 4 — Spiral-ish Infield (forces braking/lines)
+  (
+    "-34,-22/34,-22 34,-22/34,22 34,22/-34,22 -34,22/-34,-22 " +             // outer box
+    "-26,-14/26,-14 26,-14/26,14 26,14/-26,14 -26,14/-26,-14 " +             // inner box
+    "-18,-6/18,-6 18,-6/18,6 18,6/-18,6 -18,6/-18,-6 " +                     // inner2 box
+    "-10,0/10,0 0,-6/0,6 -10,-6/-10,6 10,-6/10,6 " +                         // infield dividers
+    "| " +
+    "-30,-2/-26,-2 30,2/26,2 " +
+    "| " +
+    "-32,20 -28,18 -22,16 -16,14 -10,12 0,12 10,12 16,14 22,16 28,18 32,20 " +
+    "-32,-20 -28,-18 -22,-16 -16,-14 -10,-12 0,-12 10,-12 16,-14 22,-16 28,-18 32,-20 " +
+    "| " +
+    "-20,1,8/60 -12,1,4/90 0,1,0/0 12,1,-4/-90 20,1,-8/-120 " +
+    "-20,1,-8/120 -12,1,-4/90 12,1,4/-90 20,1,8/-60 " +
+    "| " +
+    "/*map4*/"
+  ),
 
-    <script src="https://jchabin.github.io/VR-ThreeJS-Test/ThreeJS/DeviceOrientationControls.js"></script>
-    <script src="https://jchabin.github.io/VR-ThreeJS-Test/ThreeJS/StereoEffect.js"></script>
+  // MAP 5 — Wide Octagon + Cut-through (chaos-friendly multiplayer)
+  (
+    "-30,-10/-20,-20 -20,-20/0,-24 0,-24/20,-20 20,-20/30,-10 " +
+    "30,-10/30,10 30,10/20,20 20,20/0,24 0,24/-20,20 -20,20/-30,10 -30,10/-30,-10 " + // outer octagon
+    "-22,-6/-14,-14 -14,-14/0,-17 0,-17/14,-14 14,-14/22,-6 " +
+    "22,-6/22,6 22,6/14,14 14,14/0,17 0,17/-14,14 -14,14/-22,6 -22,6/-22,-6 " +        // inner octagon
+    "-6,-17/6,17 -17,0/17,0 " +                                                         // cut-through walls
+    "| " +
+    "-24,0/-22,2 24,0/22,-2 " +
+    "| " +
+    "-28,0 -24,12 -14,18 0,20 14,18 24,12 28,0 24,-12 14,-18 0,-20 -14,-18 -24,-12 " +
+    "| " +
+    "-17,1,0/90 17,1,0/-90 0,1,19/0 0,1,-19/180 " +
+    "-10,1,10/45 10,1,-10/-135 " +
+    "| " +
+    "/*map5*/"
+  )
+];
 
-    <script data-ad-client="ca-pub-8222390470642566" async
-      src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+// Pick 1 map randomly on each page load:
+const chosen = MAPS[Math.floor(Math.random() * MAPS.length)];
+document.getElementById("trackcode").textContent = chosen;
+</script>
 
-    <title>Online Racing Game!</title>
-  </head>
-
-  <body>
-    <!-- Track data storage (hidden). script.js reads this. -->
-    <div id="trackcode" class="data" style="display:none;"></div>
-
-    <div id="fore">
-      <div id="version">v1.1.3.14</div>
-      <div class="title" id="title">Online Racing Game!</div>
-
-      <div class="menuitem title">
-        Pick a name:<br>
-        <input id="name" class="title" ontouchstart="this.focus()" placeholder="Name">
-      </div>
-
-      <script>
-        var color, updateColor, menu2, host, joinGame, codeCheck;
-      </script>
-
-      <div class="menuitem title">
-        Choose a color:<br>
-        <div id="colorpicker"
-          ontouchstart="event.touches[0].buttons = 1; this.onmousemove(event.touches[0])"
-          ontouchmove="event.touches[0].buttons = 1; this.onmousemove(event.touches[0])"
-          onmousedown="this.onmousemove(event)"
-          onmousemove="if(event.buttons == 1){ var x = event.clientX - this.getBoundingClientRect().left; x = Math.min(this.clientWidth, Math.max(0, x)); color = Math.floor(x / this.clientWidth * 360); updateColor(); }">
-          <div id="slider"></div>
-        </div>
-      </div>
-
-      <div class="menuitem title">
-        <div id="start" onclick="menu2()">Start!</div>
-      </div>
-
-      <div id="settings"
-        onclick="this.parentNode.children[7].className = this.parentNode.children[7].className == 'sel' ? '' : 'sel';"></div>
-
-      <div id="toolbar">
-        <div class="tools" id="edit"
-          onclick="location.href.includes('index.html') ? window.open('editor/index.html') : window.open('editor')"></div>
-
-        <div class="tools" id="cardboard"
-          onclick="this.className = this.className == 'tools disabled' ? this.className : this.className == 'tools sel' ? 'tools' : 'tools sel';"></div>
-
-        <div class="tools" id="help"
-          onclick="location.href.includes('index.html') ? window.open('help/index.html') : window.open('help')">?</div>
-      </div>
-
-      <a id="mywebsitelink" href="https://johnnychabin.com/?projects" target="_blank">
-        <img src="https://johnnychabin.com/images/carsprev.webp" style="max-height: 30vmin;">
-      </a>
-
-      <div id="warning">
-        Hi, it looks like you're playing this game on an unofficial website
-        (which probably has sketchy ads and stuff). I would strongly recommend you
-        play the game on
-        <a href="https://jchabin.github.io/cars" target="_parent">my official website</a>
-        instead!
-      </div>
-    </div>
-
-    <!-- 5-map randomizer -->
-    <script>
-      /*
-        Format per map string:
-        WALLS | START/CP LINES | TREES | SIGNS | MAP_SCRIPT
-      */
-
-      const MAPS = [
-        // MAP 1 — Canyon Rectangle
-        (
-          "-30,-20/30,-20 30,-20/30,20 30,20/-30,20 -30,20/-30,-20 " +
-          "-20,-10/20,-10 20,-10/20,10 20,10/-20,10 -20,10/-20,-10 " +
-          "-5,-10/5,-5 5,-5/-5,0 -5,0/5,5 5,5/-5,10 " +
-          "| " +
-          "-25,0/-20,0 25,0/20,0 " +
-          "| " +
-          "-24,18 -20,16 -12,14 -6,16 6,16 12,14 20,16 24,18 " +
-          "-24,-18 -18,-16 -10,-14 0,-16 10,-14 18,-16 24,-18 " +
-          "| " +
-          "-22,1,18/90 -10,1,12/45 0,1,10/0 10,1,12/-45 22,1,18/-90 " +
-          "-22,1,-18/90 -10,1,-12/135 0,1,-10/180 10,1,-12/-135 22,1,-18/-90 " +
-          "| " +
-          "/*map1*/"
-        ),
-
-        // MAP 2 — Offset Diamond Loop
-        (
-          "-35,0/-15,22 -15,22/15,22 15,22/35,0 35,0/15,-22 15,-22/-15,-22 -15,-22/-35,0 " +
-          "-25,0/-10,15 -10,15/10,15 10,15/25,0 25,0/10,-15 10,-15/-10,-15 -10,-15/-25,0 " +
-          "-6,8/6,2 6,2/-6,-4 -6,-4/6,-10 " +
-          "| " +
-          "-12,0/-10,2 12,0/10,-2 " +
-          "| " +
-          "-30,0 -26,8 -20,14 -10,18 0,19 10,18 20,14 26,8 30,0 " +
-          "-26,-8 -20,-14 -10,-18 0,-19 10,-18 20,-14 26,-8 " +
-          "| " +
-          "-20,1,10/35 0,1,18/0 20,1,10/-35 0,1,-18/180 " +
-          "-8,1,0/90 8,1,0/-90 " +
-          "| " +
-          "/*map2*/"
-        ),
-
-        // MAP 3 — Twin Straights + Hairpins
-        (
-          "-40,-18/40,-18 40,-18/40,-6 40,-6/-40,-6 -40,-6/-40,-18 " +
-          "-40,6/40,6 40,6/40,18 40,18/-40,18 -40,18/-40,6 " +
-          "-30,-14/30,-14 30,-14/30,-10 30,-10/-30,-10 -30,-10/-30,-14 " +
-          "-30,10/30,10 30,10/30,14 30,14/-30,14 -30,14/-30,10 " +
-          "-40,-6/-35,6 -35,6/-40,18 " +
-          "40,-6/35,6 35,6/40,18 " +
-          "-40,-18/-35,-6 -35,-6/-40,6 " +
-          "40,-18/35,-6 35,-6/40,6 " +
-          "| " +
-          "-32,0/-28,0 32,0/28,0 " +
-          "| " +
-          "-38,0 -36,10 -34,16 -30,18 30,18 34,16 36,10 38,0 36,-10 34,-16 30,-18 -30,-18 -34,-16 -36,-10 " +
-          "| " +
-          "-35,1,0/90 35,1,0/-90 0,1,17/0 0,1,-17/180 " +
-          "| " +
-          "/*map3*/"
-        ),
-
-        // MAP 4 — Spiral-ish Infield
-        (
-          "-34,-22/34,-22 34,-22/34,22 34,22/-34,22 -34,22/-34,-22 " +
-          "-26,-14/26,-14 26,-14/26,14 26,14/-26,14 -26,14/-26,-14 " +
-          "-18,-6/18,-6 18,-6/18,6 18,6/-18,6 -18,6/-18,-6 " +
-          "-10,0/10,0 0,-6/0,6 -10,-6/-10,6 10,-6/10,6 " +
-          "| " +
-          "-30,-2/-26,-2 30,2/26,2 " +
-          "| " +
-          "-32,20 -28,18 -22,16 -16,14 -10,12 0,12 10,12 16,14 22,16 28,18 32,20 " +
-          "-32,-20 -28,-18 -22,-16 -16,-14 -10,-12 0,-12 10,-12 16,-14 22,-16 28,-18 32,-20 " +
-          "| " +
-          "-20,1,8/60 -12,1,4/90 0,1,0/0 12,1,-4/-90 20,1,-8/-120 " +
-          "-20,1,-8/120 -12,1,-4/90 12,1,4/-90 20,1,8/-60 " +
-          "| " +
-          "/*map4*/"
-        ),
-
-        // MAP 5 — Wide Octagon + Cut-through
-        (
-          "-30,-10/-20,-20 -20,-20/0,-24 0,-24/20,-20 20,-20/30,-10 " +
-          "30,-10/30,10 30,10/20,20 20,20/0,24 0,24/-20,20 -20,20/-30,10 -30,10/-30,-10 " +
-          "-22,-6/-14,-14 -14,-14/0,-17 0,-17/14,-14 14,-14/22,-6 " +
-          "22,-6/22,6 22,6/14,14 14,14/0,17 0,17/-14,14 -14,14/-22,6 -22,6/-22,-6 " +
-          "-6,-17/6,17 -17,0/17,0 " +
-          "| " +
-          "-24,0/-22,2 24,0/22,-2 " +
-          "| " +
-          "-28,0 -24,12 -14,18 0,20 14,18 24,12 28,0 24,-12 14,-18 0,-20 -14,-18 -24,-12 " +
-          "| " +
-          "-17,1,0/90 17,1,0/-90 0,1,19/0 0,1,-19/180 " +
-          "-10,1,10/45 10,1,-10/-135 " +
-          "| " +
-          "/*map5*/"
-        )
-      ];
-
-      const chosenIndex = Math.floor(Math.random() * MAPS.length);
-      const chosen = MAPS[chosenIndex];
-
-      document.getElementById("trackcode").textContent = chosen;
-      console.log("[MAP] chosen index:", chosenIndex);
-    </script>
-
-    <script src="script.js"></script>
-  </body>
+	<div id="fore">
+		<div id="version">v1.1.3.14</div>
+		<div class="title" id="title">Online Racing Game!</div>
+		<div class="menuitem title">Pick a name:<br/><input id="name" class="title" ontouchstart="this.focus()" placeholder="Name"></input></div>
+		<script>
+			var color, updateColor, menu2, host, joinGame, codeCheck;
+		</script>
+		<div class="menuitem title">Choose a color:<br/><div id="colorpicker" ontouchstart="event.touches[0].buttons = 1; this.onmousemove(event.touches[0])" ontouchmove="event.touches[0].buttons = 1; this.onmousemove(event.touches[0])" onmousedown="this.onmousemove(event)" onmousemove="if(event.buttons == 1){ var x = event.clientX - this.getBoundingClientRect().left; x = Math.min(this.clientWidth, Math.max(0, x)); color = Math.floor(x / this.clientWidth * 360); updateColor(); }"><div id="slider"></div></div></div>
+		<div class="menuitem title"><div id="start" onclick="menu2()">Start!</div></div>
+		<div id="settings" onclick="this.parentNode.children[7].className = this.parentNode.children[7].className == 'sel' ? '' : 'sel';"></div>
+		<div id="toolbar">
+			<div class="tools" id="edit" onclick="location.href.includes('index.html') ? window.open('editor/index.html') : window.open('editor')"></div>
+			<div class="tools" id="cardboard" onclick="this.className = this.className == 'tools disabled' ? this.className : this.className == 'tools sel' ? 'tools' : 'tools sel';"></div>
+			<div class="tools" id="help" onclick="location.href.includes('index.html') ? window.open('help/index.html') : window.open('help')">?</div>
+		</div>
+		<a id="mywebsitelink" href="https://johnnychabin.com/?projects" target="_blank"><img src="https://johnnychabin.com/images/carsprev.webp" style="max-height: 30vmin;"></a>
+		<div id="warning">
+			Hi, it looks like you're playing this game on an unofficial website
+			(which probably has sketchy ads and stuff). I would strongly recommend you
+			play the game on
+			<a href="https://jchabin.github.io/cars" target="_parent">my official website</a>
+			instead!
+		</div>
+	</div>
+	<script src="script.js"></script>
+	</body>
 </html>
