@@ -13,7 +13,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="referrer" content="no-referrer-when-downgrade">
 
 <link href="https://fonts.googleapis.com/css?family=Monoton|Press+Start+2P" rel="stylesheet">
 <link href="style.css" rel="stylesheet">
@@ -33,7 +32,10 @@
 
 <body>
 
-<div id="trackcode" class="data"></div>
+<!-- ORIGINAL WORKING MAP -->
+<div id="trackcode" class="data">
+1,5/0,7 0,7/-1,8 -1,8/-3,9 -3,9/-7,9 -7,9/-9,8 -9,8/-10,7 -10,7/-11,5 |-1,3/1,3 |-7,5 -5,6 -4,5 | |
+</div>
 
 <div id="fore">
 <div id="version">v1.1.3.14</div>
@@ -50,9 +52,7 @@ var color, updateColor, menu2, host, joinGame, codeCheck;
 
 <div class="menuitem title">
 Choose a color:<br/>
-<div id="colorpicker">
-<div id="slider"></div>
-</div>
+<div id="colorpicker"><div id="slider"></div></div>
 </div>
 
 <div class="menuitem title">
@@ -71,25 +71,6 @@ onclick="location.href.includes('index.html') ? window.open('editor/index.html')
 onclick="location.href.includes('index.html') ? window.open('help/index.html') : window.open('help')">?</div>
 </div>
 </div>
-
-<script>
-/* SAFE MAP SYSTEM — does not break script.js */
-
-window.addEventListener("load", function(){
-
-const MAPS = [
-"1,5/0,7 0,7/-1,8 -1,8/-3,9 -3,9/-7,9 -7,9/-9,8 -9,8/-10,7 -10,7/-11,5 |-1,3/1,3 |-7,5 -5,6 -4,5 | |",
-"-14,-12/14,-12 14,-12/14,12 14,12/-14,12 -14,12/-14,-12 | -2,2/2,2 -2,-8/2,-8 | | |",
-"-12,-10/12,-10 12,-10/12,10 12,10/-12,10 -12,10/-12,-10 -2,-10/-2,10 2,-10/2,10 | -2,0/2,0 -2,-8/2,-8 | | |",
-"-14,-10/14,-10 14,-10/14,10 14,10/-14,10 -14,10/-14,-10 -10,4/10,4 -10,-4/10,-4 | -2,4/2,4 -2,-8/2,-8 | | |",
-"-12,-12/12,-12 12,-12/12,12 12,12/-12,12 -12,12/-12,-12 -2,-12/-2,12 2,-12/2,12 -12,-2/12,-2 -12,2/12,2 | -3,0/3,0 -3,-10/3,-10 | | |"
-];
-
-const chosen = MAPS[Math.floor(Math.random()*MAPS.length)];
-document.getElementById("trackcode").textContent = chosen;
-
-});
-</script>
 
 <script src="script.js"></script>
 
