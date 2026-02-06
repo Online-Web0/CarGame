@@ -15,13 +15,13 @@ function MODS(){
 
 var serverList = [
 	{
-		apiKey: "AIzaSyDiJsMLlix5o9XqPW1EpeBvuA15XNjlR8M",
-		authDomain: "car-game-a86b9.firebaseapp.com",
-		databaseURL: "https://car-game-a86b9.firebaseio.com",
-		projectId: "car-game-a86b9",
-		storageBucket: "car-game-a86b9.appspot.com",
-		messagingSenderId: "722396856191",
-		appId: "1:722396856191:web:fb5f72917856108a50e44a"
+		apiKey: "AIzaSyAbvjrx9Nvu2_xRFTN-AEN8dJgRUDdb410",
+		authDomain: "car-game67.firebaseapp.com",
+		databaseURL: "https://car-game67-default-rtdb.firebaseio.com/",
+		projectId: "car-game67",
+		storageBucket: "car-game67.appspot.com",
+		messagingSenderId: "211052611005",
+		appId: "1:211052611005:web:bd456d81c7be8825e1fed4",
 	},
 	{
 		apiKey: "AIzaSyCsqpn0aTDqU8ffGVE284fmSEOTK2tOgq8",
