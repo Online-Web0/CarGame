@@ -649,11 +649,18 @@ function join(){
 
 					play.data.dir += play.data.steer / 10 * warp;
 
-					play.data.xv += Math.sin(play.data.dir) * SPEED * warp;
-					play.data.yv += Math.cos(play.data.dir) * SPEED * warp;
+					const ACCEL = SPEED * 1.6;
+					const FRICTION = 0.965;
+					const DRAG = 0.992;
 
-					play.data.xv *= Math.pow(0.99, warp);
-					play.data.yv *= Math.pow(0.99, warp);
+					play.data.xv += Math.sin(play.data.dir) * ACCEL * warp;
+					play.data.yv += Math.cos(play.data.dir) * ACCEL * warp;
+
+					play.data.xv *= Math.pow(FRICTION, warp);
+					play.data.yv *= Math.pow(FRICTION, warp);
+
+					play.data.xv *= DRAG;
+					play.data.yv *= DRAG;
 
 					play.data.x += play.data.xv * warp;
 					play.data.y += play.data.yv * warp;
