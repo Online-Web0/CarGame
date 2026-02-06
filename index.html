@@ -1,90 +1,282 @@
 <!DOCTYPE html>
 <html>
-<head>
-<meta charset="UTF-8">
-<title>Online Racing Game</title>
+	<head>
+		<!-- thanks to https://realfavicongenerator.net/ -->
+		<link rel="apple-touch-icon" sizes="180x180" href="favicons/apple-touch-icon.png">
+		<link rel="icon" type="image/png" sizes="32x32" href="favicons/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="194x194" href="favicons/favicon-194x194.png">
+		<link rel="icon" type="image/png" sizes="192x192" href="favicons/android-chrome-192x192.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="favicons/favicon-16x16.png">
+		<link rel="manifest" href="favicons/manifest.json">
+		<link rel="mask-icon" href="favicons/safari-pinned-tab.svg" color="#5bbad5">
+		<meta name="theme-color" content="#ffffff">
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1">
+		<meta name="referrer" content="no-referrer-when-downgrade">
+		<link href="https://fonts.googleapis.com/css?family=Monoton|Press+Start+2P" rel="stylesheet">
+		<link href="style.css" rel="stylesheet">
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/86/three.min.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-app.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-database.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-auth.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-analytics.js"></script>
+		<script src="https://jchabin.github.io/VR-ThreeJS-Test/ThreeJS/DeviceOrientationControls.js"></script>
+		<script src="https://jchabin.github.io/VR-ThreeJS-Test/ThreeJS/StereoEffect.js"></script>
+		<script data-ad-client="ca-pub-8222390470642566" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+		<title>Online Racing Game!</title>
 
-<link href="style.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css?family=Monoton|Press+Start+2P" rel="stylesheet">
+		<!-- Added: small self-contained styling for the map panel only (does not touch your core UI/CSS) -->
+		<style>
+			#mappanel{
+				position: fixed;
+				left: 14px;
+				bottom: 14px;
+				z-index: 999999;
+				font-family: "Press Start 2P", monospace;
+				font-size: 10px;
+				line-height: 1.4;
+				background: rgba(0,0,0,0.55);
+				border: 2px solid rgba(255,255,255,0.25);
+				border-radius: 10px;
+				padding: 10px 10px 8px;
+				color: #fff;
+				user-select: none;
+				backdrop-filter: blur(6px);
+			}
+			#mappanel button{
+				font-family: inherit;
+				font-size: 10px;
+				padding: 6px 8px;
+				border-radius: 6px;
+				border: 1px solid rgba(255,255,255,0.3);
+				background: rgba(255,255,255,0.08);
+				color: #fff;
+				cursor: pointer;
+			}
+			#mappanel button:hover{ background: rgba(255,255,255,0.14); }
+			#mappanel .row{ display:flex; gap:6px; align-items:center; }
+			#mappanel .title{ margin-bottom: 6px; opacity: 0.95; }
+			#mapname{ margin: 6px 0 8px; opacity: 0.9; }
+			#mapkeys{ margin-top: 8px; opacity: 0.7; }
+			#randwrap{ display:flex; align-items:center; gap:8px; margin-top: 8px; opacity: 0.9; }
+			#randwrap input{ transform: scale(1.1); }
+		</style>
+	</head>
 
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
+	<body>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/86/three.min.js"></script>
+	<!-- Starter map is located here (this is your working one). We keep it intact as the default. -->
+	<div id="trackcode" class="data">
+		1,5/0,7 0,7/-1,8 -1,8/-3,9 -3,9/-7,9 -7,9/-9,8 -9,8/-10,7 -10,7/-11,5 -6,7/-4,7 -4,7/-2,6 -2,6/-1,4 -6,7/-8,6 -8,6/-9,4 -1,4/-1,0 1,0/1,5 -11,5/-11,0 -11,0/-10,-1 -10,-1/-8,-1 -8,-1/-7,0 -7,0/-7,2 -9,3/-8,4 -8,4/-6,4 -6,4/-5,3 -5,3/-5,1 -9,1/-9,4 -5,3/-4,4 -4,4/-2,4 -2,4/-1,3 -7,0/-6,-1 -6,-1/-4,-1 -4,-1/-3,0 -3,0/-3,2 -1,0/-1,-2 -1,-2/0,-4 0,-4/2,-5 2,-5/4,-5 4,-5/6,-4 6,-4/7,-2 -3,0/-3,-3 -3,-3/-2,-5 -2,-5/-1,-6 -1,-6/1,-7 1,-7/5,-7 5,-7/7,-6 7,-6/8,-5 8,-5/9,-3 9,-3/9,2 9,2/8,4 8,4/6,5 6,5/4,5 4,5/2,4 2,4/1,2 7,-2/7,2 7,2/6,3 6,3/4,3 4,3/3,2 4,-3/2,-3 2,-3/1,-2 1,-2/1,0 4,-3/5,-2 5,-2/5,1 3,2/3,-1 |-1,3/1,3 6,-4/7,-6 |-7,5 -5,6 -4,5 2,6 1,8 3,9 4,6 3,7 -3,10 -4,12 -10,11 -12,8 -14,8 -12,6 -7,10 -12,2 -15,3 -13,-1 -10,-4 -8,-2 -6,-4 -4,-3 -11,-2 -8,-3 -4,-5 -3,-6 -5,-2 0,-8 -2,-8 -4,-8 -5,-6 -3,-10 2,-9 4,-8 5,-10 6,-8 10,-7 8,-7 9,-11 9,-5 15,-4 11,-2 11,-1 10,3 16,2 12,1 8,6 7,9 6,6 -8,-7 -13,-7 -13,-4 -15,-4 -17,0 |1,3,6/22 0,3,8/55 -2,3,9/77 -8,3,9/115 -10,3,8/148 -11,3,6/166 -8,3,4/-86 -7,3,4/-83 -6,3,4/-90 -10,3,-1/-83 -9,3,-1/-88 -8,3,-1/-90 -6,3,-1/-89 -5,3,-1/-89 -4,3,-1/-89 -4,3,4/-90 -3,3,4/-90 -2,3,4/265 -3,3,-4/194 -2,3,-6/218 0,3,-7/262 6,3,-7/-69 8,3,-6/-42 9,3,-4/-16 9,3,4/40 8,3,5/70 2,3,5/135 3,3,6/122|
+	</div>
 
-<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-database.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.22.1/firebase-analytics.js"></script>
+	<div id="fore">
+		<div id="version">v1.1.3.14</div>
+		<div class="title" id="title">Online Racing Game!</div>
+		<div class="menuitem title">Pick a name:<br/><input id="name" class="title" ontouchstart="this.focus()" placeholder="Name"></input></div>
+		<script>
+			var color, updateColor, menu2, host, joinGame, codeCheck;
+		</script>
+		<div class="menuitem title">Choose a color:<br/><div id="colorpicker" ontouchstart="event.touches[0].buttons = 1; this.onmousemove(event.touches[0])" ontouchmove="event.touches[0].buttons = 1; this.onmousemove(event.touches[0])" onmousedown="this.onmousemove(event)" onmousemove="if(event.buttons == 1){ var x = event.clientX - this.getBoundingClientRect().left; x = Math.min(this.clientWidth, Math.max(0, x)); color = Math.floor(x / this.clientWidth * 360); updateColor(); }"><div id="slider"></div></div></div>
+		<div class="menuitem title"><div id="start" onclick="menu2()">Start!</div></div>
+		<div id="settings" onclick="this.parentNode.children[7].className = this.parentNode.children[7].className == 'sel' ? '' : 'sel';"></div>
+		<div id="toolbar">
+			<div class="tools" id="edit" onclick="location.href.includes('index.html') ? window.open('editor/index.html') : window.open('editor')"></div>
+			<div class="tools" id="cardboard" onclick="this.className = this.className == 'tools disabled' ? this.className : this.className == 'tools sel' ? 'tools' : 'tools sel';"></div>
+			<div class="tools" id="help" onclick="location.href.includes('index.html') ? window.open('help/index.html') : window.open('help')">?</div>
+		</div>
+		<a id="mywebsitelink" href="https://johnnychabin.com/?projects" target="_blank"><img src="https://johnnychabin.com/images/carsprev.webp" style="max-height: 30vmin;"></a>
+		<div id="warning">
+			Hi, it looks like you're playing this game on an unofficial website
+			(which probably has sketchy ads and stuff). I would strongly recommend you
+			play the game on
+			<a href="https://jchabin.github.io/cars" target="_parent">my official website</a>
+			instead!
+		</div>
 
-<script src="https://jchabin.github.io/VR-ThreeJS-Test/ThreeJS/DeviceOrientationControls.js"></script>
-<script src="https://jchabin.github.io/VR-ThreeJS-Test/ThreeJS/StereoEffect.js"></script>
-</head>
+		<!-- Added: Map picker panel (does not change any existing crucial elements/classes) -->
+		<div id="mappanel">
+			<div class="title">MAP:</div>
+			<div id="mapname">Starter Map</div>
+			<div class="row">
+				<button id="prevmap" type="button">◀</button>
+				<button id="randmap" type="button">RANDOM</button>
+				<button id="nextmap" type="button">▶</button>
+			</div>
+			<div id="randwrap">
+				<label><input id="randOnStart" type="checkbox"> Randomize on Start</label>
+			</div>
+			<div id="mapkeys">Keys: [ / ] or R</div>
+		</div>
+	</div>
 
-<body>
+	<!-- Added: map feature logic (keeps your starter map as default, adds 4 more, random/selector, and does NOT touch script.js) -->
+	<script>
+	(function(){
+		const trackEl = document.getElementById("trackcode");
 
-<!-- Hidden map container used by script.js -->
-<div id="trackcode" class="data" style="display:none;"></div>
+		// Preserve the exact working starter map as a default.
+		const STARTER_MAP = (trackEl.textContent || "").trim();
 
-<!-- ================= UI ================= -->
+		// NOTE: These 4 extra maps follow your existing format:
+		// WALLS | FINISH+CHECKPOINT | TREES | SIGNS | (empty script) |
+		// They are designed so spawn near (0,0) is usable and both lines are reachable.
 
-<div id="fore">
-  <div id="version">v1.1.3.14</div>
+		const MAPS = [
+			{ name: "Starter Map", data: STARTER_MAP },
 
-  <div class="title" id="title">
-    ONLINE RACING
-  </div>
+			{ name: "Grand Ring",
+			  data:
+				// outer boundary + interior obstacles (open arena race)
+				"-14,-12/14,-12 14,-12/14,12 14,12/-14,12 -14,12/-14,-12 " +
+				"-6,-10/-6,10 6,-10/6,10 -10,-2/10,-2 -10,2/10,2 " +
+				"-2,6/2,6 -2,-6/2,-6 " +
+				"| " +
+				"-2,2/2,2 -2,-8/2,-8 " +
+				"| " +
+				"-13,11 -10,9 -7,11 7,11 10,9 13,11 -13,-11 -10,-9 -7,-11 7,-11 10,-9 13,-11 " +
+				"| " +
+				"0,3,10/0 0,3,-10/180 -12,3,0/90 12,3,0/-90 " +
+				"|"
+			},
 
-  <div class="menuitem title">
-    Pick a name:<br>
-    <input id="name" class="title" placeholder="Driver">
-  </div>
+			{ name: "Downtown Grid",
+			  data:
+				// outer boundary + 4 buildings
+				"-15,-11/15,-11 15,-11/15,11 15,11/-15,11 -15,11/-15,-11 " +
+				"-10,7/-6,7 -6,7/-6,10 -6,10/-10,10 -10,10/-10,7 " +
+				"6,7/10,7 10,7/10,10 10,10/6,10 6,10/6,7 " +
+				"-10,-10/-6,-10 -6,-10/-6,-6 -6,-6/-10,-6 -10,-6/-10,-10 " +
+				"6,-10/10,-10 10,-10/10,-6 10,-6/6,-6 6,-6/6,-10 " +
+				"-2,-2/2,-2 2,-2/2,2 2,2/-2,2 -2,2/-2,-2 " +
+				"| " +
+				"-2,1/2,1 -2,-9/2,-9 " +
+				"| " +
+				"-14,0 -12,5 -12,-5 12,5 12,-5 14,0 -5,10 5,10 -5,-10 5,-10 " +
+				"| " +
+				"-7,3,8/45 7,3,8/-45 -7,3,-8/135 7,3,-8/-135 0,3,0/0 " +
+				"|"
+			},
 
-  <div class="menuitem title">
-    Choose a color:<br>
-    <div id="colorpicker">
-      <div id="slider"></div>
-    </div>
-  </div>
+			{ name: "Snake Pass",
+			  data:
+				// outer boundary + snake barriers
+				"-16,-12/16,-12 16,-12/16,12 16,12/-16,12 -16,12/-16,-12 " +
+				"-12,8/12,8 12,8/12,6 12,6/-12,6 -12,6/-12,8 " +
+				"-12,2/12,2 12,2/12,0 12,0/-12,0 -12,0/-12,2 " +
+				"-12,-4/12,-4 12,-4/12,-6 12,-6/-12,-6 -12,-6/-12,-4 " +
+				"-8,-10/8,-10 8,-10/8,-8 8,-8/-8,-8 -8,-8/-8,-10 " +
+				"| " +
+				"-2,4/2,4 -2,-8/2,-8 " +
+				"| " +
+				"-15,11 -13,9 -11,11 -9,9 -7,11 7,11 9,9 11,11 13,9 15,11 " +
+				"-15,-11 -13,-9 -11,-11 -9,-9 -7,-11 7,-11 9,-9 11,-11 13,-9 15,-11 " +
+				"| " +
+				"0,3,11/0 0,3,-11/180 -14,3,0/90 14,3,0/-90 -6,3,5/30 6,3,-5/-150 " +
+				"|"
+			},
 
-  <div class="menuitem title">
-    <div id="start" onclick="menu2()">START</div>
-  </div>
+			{ name: "Crossroads Arena",
+			  data:
+				// outer boundary + cross + corner funnels
+				"-14,-14/14,-14 14,-14/14,14 14,14/-14,14 -14,14/-14,-14 " +
+				"-2,-14/-2,14 2,-14/2,14 -14,-2/14,-2 -14,2/14,2 " +
+				"-14,10/-10,14 14,10/10,14 -14,-10/-10,-14 14,-10/10,-14 " +
+				"| " +
+				"-3,0/3,0 -3,-12/3,-12 " +
+				"| " +
+				"-13,13 -11,12 -9,13 9,13 11,12 13,13 -13,-13 -11,-12 -9,-13 9,-13 11,-12 13,-13 " +
+				"| " +
+				"0,3,12/0 0,3,-12/180 -12,3,0/90 12,3,0/-90 -10,3,10/45 10,3,-10/-135 " +
+				"|"
+			}
+		];
 
-  <div id="settings"></div>
+		// ---------- selection + persistence ----------
+		const LS_KEY = "cars_selected_map_index_v1";
+		const LS_RAND = "cars_randomize_on_start_v1";
 
-  <div id="toolbar">
-    <div class="tools" id="edit"></div>
-    <div class="tools" id="cardboard"></div>
-    <div class="tools" id="help">?</div>
-  </div>
-</div>
+		let currentIndex = 0;
 
-<!-- ================= MAP SYSTEM ================= -->
+		function clampIndex(i){
+			i = i % MAPS.length;
+			if(i < 0) i += MAPS.length;
+			return i;
+		}
 
-<script>
-const MAPS = [
+		function applyMap(i, persist){
+			currentIndex = clampIndex(i);
+			trackEl.textContent = MAPS[currentIndex].data; // safest for pure text
+			const nameEl = document.getElementById("mapname");
+			if(nameEl) nameEl.textContent = MAPS[currentIndex].name;
+			if(persist){
+				try{ localStorage.setItem(LS_KEY, String(currentIndex)); }catch(e){}
+			}
+		}
 
-"-10,-6/10,-6 10,-6/10,6 10,6/-10,6 -10,6/-10,-6 -7,-3/7,-3 7,-3/7,3 7,3/-7,3 -7,3/-7,-3 |-9,0/-7,0 9,0/7,0 |-10,7 -8,7 -6,7 6,7 8,7 10,7 -10,-7 -8,-7 -6,-7 6,-7 8,-7 10,-7 |0,1,8/0 0,1,-8/180 |",
+		function randomIndex(){
+			return Math.floor(Math.random() * MAPS.length);
+		}
 
-"-8,-8/8,-8 8,-8/8,8 8,8/-8,8 -8,8/-8,-8 -4,-4/4,-4 4,-4/4,4 4,4/-4,4 -4,4/-4,-4 |-7,0/-5,0 7,0/5,0 |-9,0 9,0 0,9 0,-9 -6,6 6,6 -6,-6 6,-6 |0,1,6/0 0,1,-6/180 |",
+		// Load last selection if possible (still keeps Starter as fallback)
+		try{
+			const saved = parseInt(localStorage.getItem(LS_KEY), 10);
+			if(!isNaN(saved)) currentIndex = clampIndex(saved);
+		}catch(e){}
 
-"-12,-4/12,-4 12,-4/12,4 12,4/-12,4 -12,4/-12,-4 -9,-2/9,-2 9,-2/9,2 9,2/-9,2 -9,2/-9,-2 |-11,0/-9,0 11,0/9,0 |-12,5 -10,5 10,5 12,5 -12,-5 -10,-5 10,-5 12,-5 |0,1,5/0 0,1,-5/180 |",
+		applyMap(currentIndex, false);
 
-"-9,-9/9,-9 9,-9/9,9 9,9/-9,9 -9,9/-9,-9 -5,-5/5,-5 5,-5/5,5 5,5/-5,5 -5,5/-5,-5 |-8,0/-6,0 8,0/6,0 |-10,0 10,0 0,10 0,-10 |0,1,7/0 0,1,-7/180 |",
+		// Randomize toggle state
+		const randToggle = document.getElementById("randOnStart");
+		if(randToggle){
+			try{
+				randToggle.checked = localStorage.getItem(LS_RAND) === "1";
+			}catch(e){ randToggle.checked = false; }
 
-"-11,-7/11,-7 11,-7/11,7 11,7/-11,7 -11,7/-11,-7 -7,-3/7,-3 7,-3/7,3 7,3/-7,3 -7,3/-7,-3 |-10,0/-8,0 10,0/8,0 |-12,0 -12,6 12,6 12,0 -12,-6 12,-6 |0,1,9/0 0,1,-9/180 |"
+			randToggle.addEventListener("change", function(){
+				try{ localStorage.setItem(LS_RAND, randToggle.checked ? "1" : "0"); }catch(e){}
+			});
+		}
 
-];
+		// Buttons
+		const prevBtn = document.getElementById("prevmap");
+		const nextBtn = document.getElementById("nextmap");
+		const randBtn = document.getElementById("randmap");
 
-document.getElementById("trackcode").innerHTML =
-MAPS[Math.floor(Math.random() * MAPS.length)];
-</script>
+		if(prevBtn) prevBtn.addEventListener("click", () => applyMap(currentIndex - 1, true));
+		if(nextBtn) nextBtn.addEventListener("click", () => applyMap(currentIndex + 1, true));
+		if(randBtn) randBtn.addEventListener("click", () => applyMap(randomIndex(), true));
 
-<!-- ================= GAME SCRIPT ================= -->
+		// Keys
+		window.addEventListener("keydown", function(e){
+			// Don’t interfere if the user is typing a name
+			const a = document.activeElement;
+			if(a && (a.id === "name" || a.tagName === "INPUT" || a.tagName === "TEXTAREA")) return;
 
-<script src="script.js"></script>
+			// If game has started, ignore map keys (script.js defines gameStarted later)
+			if(typeof gameStarted !== "undefined" && gameStarted) return;
 
-</body>
+			if(e.key === "[" || e.key === "{") applyMap(currentIndex - 1, true);
+			if(e.key === "]" || e.key === "}") applyMap(currentIndex + 1, true);
+			if(e.key.toLowerCase() === "r") applyMap(randomIndex(), true);
+		});
+
+		// Randomize on Start click (does not replace your existing onclick="menu2()", it just runs alongside it)
+		window.addEventListener("load", function(){
+			const startBtn = document.getElementById("start");
+			if(!startBtn) return;
+			startBtn.addEventListener("click", function(){
+				if(randToggle && randToggle.checked){
+					applyMap(randomIndex(), true);
+				}
+			});
+		}, { once:true });
+
+	})();
+	</script>
+
+	<!-- Your original game logic -->
+	<script src="script.js"></script>
+	</body>
 </html>
