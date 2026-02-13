@@ -563,8 +563,12 @@ function createMeIfNeeded() {
   // Initial write
   ref.set(me.data);
 }
+function hideMenu(){
+  document.getElementById("fore").style.display = "none";
+}
 
-menu2 = function () {
+menu2 = function (hideMenu();
+) {
   // Start game
   ensureEngine();
   loadMap(); // rebuild map first
@@ -582,6 +586,26 @@ menu2 = function () {
     // nothing else needed; physics unfreezes in render loop
   });
 };
+function menu2(){
+  document.getElementById("title").innerHTML = "Choose Mode";
+
+  document.getElementById("start").style.display = "none";
+
+  const host = document.createElement("div");
+  host.className = "button";
+  host.innerHTML = "HOST";
+  host.style.top = "30vh";
+  host.onclick = join;
+
+  const joinBtn = document.createElement("div");
+  joinBtn.className = "button";
+  joinBtn.innerHTML = "JOIN";
+  joinBtn.style.top = "60vh";
+  joinBtn.onclick = join;
+
+  document.body.appendChild(host);
+  document.body.appendChild(joinBtn);
+}
 
 // ====== Multiplayer listeners ======
 function upsertRemotePlayer(key, data) {
@@ -657,11 +681,18 @@ function attachMultiplayerListeners() {
 }
 
 // ====== join() ======
-function join() {
+function join(gameStarted = true;
+) {
   ensureEngine();
   setupInput();
   setupColorPicker();
   attachMultiplayerListeners();
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(200, 200),
+  new THREE.MeshLambertMaterial({ color: 0x3a8f3a })
+);
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
 
   // Build initial map immediately so the world exists even before Start
   loadMap();
