@@ -62,6 +62,33 @@ lap.style.top = "10px";
 lap.style.left = "10px";
 lap.style.color = "white";
 document.body.appendChild(lap);
+/* ===== REQUIRED ENGINE SETUP ===== */
+
+var scene = new THREE.Scene();
+
+var renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+var map = new THREE.Object3D();
+scene.add(map);
+
+var startc = new THREE.Object3D();
+scene.add(startc);
+
+var players = {};
+var labels = [];
+
+var gameStarted = false;
+var gameSortaStarted = false;
+var mobile = false;
+
+var lap = document.createElement("div");
+lap.style.position = "absolute";
+lap.style.top = "10px";
+lap.style.left = "10px";
+lap.style.color = "white";
+document.body.appendChild(lap);
 
 // ... (everything above your join() stays the same)
 function loadMap() {
