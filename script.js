@@ -85,7 +85,7 @@ function ensureEngine() {
   renderer.domElement.style.position = "fixed";
   renderer.domElement.style.left = "0";
   renderer.domElement.style.top = "0";
-  renderer.domElement.style.zIndex = "0";
+  renderer.domElement.style.zIndex = "-1";
   document.body.insertBefore(renderer.domElement, document.body.firstChild);
 
   map = new THREE.Object3D();
