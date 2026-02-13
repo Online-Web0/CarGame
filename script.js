@@ -700,7 +700,8 @@ function hideMainMenu() {
   clearModeUI();
 
   // Allow gameplay input
-  foreEl.style.pointerEvents = "none";
+  // foreEl.style.pointerEvents = "none";
+
 }
 
 // ====== Toolbar tools ======
