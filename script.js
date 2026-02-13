@@ -1291,6 +1291,10 @@ function renderLoop(ts) {
 
 // ====== Init ======
 function init() {
+
+if (foreEl) foreEl.style.pointerEvents = "auto";
+
+  
   ensureEngine();
   setupToolbarOnce();
   setupInputOnce();
