@@ -37,7 +37,9 @@ var database = firebase.database();
 firebase.auth().signInAnonymously().catch(console.error);
 
 // ... (everything above your join() stays the same)
-
+function loadMap() {
+  return "";
+}
 // ====== join() ======
 function join(){
 	eval(loadMap());
