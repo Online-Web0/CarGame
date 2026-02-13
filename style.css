@@ -47,8 +47,8 @@ input{
 	font-size: 10vmin;
 	text-shadow: 0 0 1vmin black;
 	text-align: center;
-	-webkit-transform: translate3d(0, -100vh, 0);
-	        transform: translate3d(0, -100vh, 0);
+	-webkit-transform: translate3d(0, 0, 0);
+	        transform: translate3d(0, 0, 0);
 	transition: -webkit-transform .5s ease-out;
 	transition: transform .5s ease-out;
 	transition: transform .5s ease-out, -webkit-transform .5s ease-out;
@@ -73,8 +73,8 @@ input{
 	font-size: 7vmin;
 	text-align: center;
 	text-shadow: 0 0 1vmin black;
-	-webkit-transform: translate3d(-100vw, 0, 0);
-	        transform: translate3d(-100vw, 0, 0);
+	-webkit-transform: translate3d(0, 0, 0);
+	        transform: translate3d(0, 0, 0);
 	transition: -webkit-transform .5s ease-out;
 	transition: transform .5s ease-out;
 	transition: transform .5s ease-out, -webkit-transform .5s ease-out;
