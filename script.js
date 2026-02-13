@@ -1322,7 +1322,7 @@ window.host = hostFlow;
 window.joinGame = joinFlow;
 window.codeCheck = function () {};
 window.updateColor = function (x01) { setSliderFrom01(x01); };
-window.join = init;
+
 
 // Clean up firebase presence on close
 window.addEventListener("beforeunload", function(){
