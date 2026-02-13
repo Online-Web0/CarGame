@@ -980,6 +980,20 @@ function join() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   }
 }
+const slider = document.getElementById("slider");
+const picker = document.getElementById("colorpicker");
+
+picker.addEventListener("click", function(e) {
+  const rect = picker.getBoundingClientRect();
+  let x = e.clientX - rect.left;
+  x = Math.max(0, Math.min(rect.width, x));
+
+  slider.style.transform =
+    "translate(" + (x - slider.offsetWidth / 2) + "px, -2vmin)";
+
+  const hue = (x / rect.width) * 360;
+  slider.style.backgroundColor = "hsl(" + hue + ",100%,50%)";
+});
 
 // If the page already loaded before script.js appended, still try to initialize
 if (document.readyState === "complete" || document.readyState === "interactive") {
