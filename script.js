@@ -174,7 +174,7 @@ function ensureEngine() {
   renderer.domElement.style.top = "0";
   renderer.domElement.style.left = "0";
   renderer.domElement.style.zIndex = "-1";
- renderer.domElement.style.pointerEvents = "none";
+
   document.body.insertBefore(renderer.domElement, document.body.firstChild);
 
   // Groups
@@ -1292,10 +1292,11 @@ function renderLoop(ts) {
 // ====== Init ======
 function init() {
 
-if (foreEl) foreEl.style.pointerEvents = "auto";
 
-  
+
   ensureEngine();
+ if (foreEl) foreEl.style.pointerEvents = "auto";
+  
   setupToolbarOnce();
   setupInputOnce();
   setupColorPickerOnce();
