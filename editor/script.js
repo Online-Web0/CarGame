@@ -262,7 +262,9 @@ if (spawnText) {
         var pos = sp[0].split(",");
         spawn.x = parseInt(pos[0]) + Math.floor(width / scale / 2);
         spawn.y = -parseInt(pos[1]) + Math.floor(height / scale / 2);
-        spawn.angle = parseInt(sp[1]) * Math.PI / 180;
+// stored value is game dir; convert back to editor angle
+var dir = parseInt(sp[1]) * Math.PI / 180;
+spawn.angle = (Math.PI / 2) - dir;
     }
 }
 
@@ -370,7 +372,9 @@ function exp(){
 text += "|";
 text += (spawn.x - Math.floor(width / scale / 2)) + ",";
 text += (-1 * (spawn.y - Math.floor(height / scale / 2))) + "/";
-text += Math.floor(spawn.angle * 180 / Math.PI);
+
+var spawnDir = (Math.PI / 2) - spawn.angle;   // <-- key line
+text += Math.floor(spawnDir * 180 / Math.PI);
 
 text += "|";
 text += "<br/>";
