@@ -9,6 +9,11 @@ canvas {
   position: relative;
   z-index: 10;
 }
+#fore {
+  position: relative;
+  z-index: 1000;
+  pointer-events: auto;
+}
 
 #version{
 	position: absolute;
@@ -38,6 +43,10 @@ input{
 	transition: transform .5s ease-in-out, -webkit-transform .5s ease-in-out;
 	text-align: center;
 }
+canvas {
+  pointer-events: none;
+}
+
 .title{
 	font-family: Monoton;
 }
