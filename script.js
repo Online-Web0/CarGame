@@ -92,36 +92,38 @@ function collideWithPlayers() {
     var delta = myPos.clone().sub(otherPos);
     var dist = delta.length();
 
-    var radius = 1.5;
+    var radius = 0.9;
 
     if (dist < radius * 2 && dist > 0.001) {
-        var n = delta.normalize();
+      var n = delta.normalize();
 
-        // push apart strongly
-        var push = (radius * 2 - dist) * 1.1;
+      // --- separate cars ---
+      var overlap = (radius * 2 - dist) * 0.5;
 
-        me.data.x += n.x * push;
-        me.data.y += n.y * push;
+      me.data.x += n.x * overlap;
+      me.data.y += n.y * overlap;
 
-        p.data.x -= n.x * push;
-        p.data.y -= n.y * push;
+      p.data.x -= n.x * overlap;
+      p.data.y -= n.y * overlap;
 
-        // strong arcade bounce
-        var mySpeed = Math.sqrt(me.data.xv*me.data.xv + me.data.yv*me.data.yv);
-        var otherSpeed = Math.sqrt((p.data.xv||0)*(p.data.xv||0) + (p.data.yv||0)*(p.data.yv||0));
+      // --- bounce velocities ---
+      var myVel = vec2(me.data.xv, me.data.yv);
+      var otherVel = vec2(p.data.xv || 0, p.data.yv || 0);
 
-        var force = (mySpeed + otherSpeed) * 2.2;
+      var relVel = myVel.clone().sub(otherVel);
 
-        me.data.xv += n.x * force;
-        me.data.yv += n.y * force;
+      if (relVel.dot(n) < 0) {
+        var impulse = relVel.dot(n) * 0.8;
 
-        p.data.xv -= n.x * force;
-        p.data.yv -= n.y * force;
+        me.data.xv -= n.x * impulse;
+        me.data.yv -= n.y * impulse;
 
+        p.data.xv += n.x * impulse;
+        p.data.yv += n.y * impulse;
+      }
+    }
+  }
 }
-
-}
-
 
 
 // ====== Input state ======
@@ -1152,6 +1154,9 @@ function updateMePhysics(warp) {
     if (!(left ^ right)) me.data.steer = 0;
   }
   me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
+collideMeWithWalls();
+collideWithPlayers();
+handleCheckpoints();
 
 
   var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
@@ -1218,9 +1223,9 @@ function collideMeWithWalls() {
     if (dist < WALL_SIZE) {
       var n = (dist > 1e-6) ? delta.multiplyScalar(1 / dist) : vec2(0, 1);
       if (v.dot(n) < 0) {
-     v = reflect2(v, n);
+       v = reflect2(v, n);
         v.add(n.clone().multiplyScalar(BOUNCE_CORRECT));
-    v.multiplyScalar(1.35);
+     v.multiplyScalar(0.9);
       }
       p = c.add(n.multiplyScalar(WALL_SIZE + 0.001));
     }
