@@ -229,8 +229,11 @@ function ensureEngine() {
   lapEl = document.getElementById("lap");
 
   if (!countdownEl) {
-    countdownEl = makeDiv("countdown", "", "");
-    document.body.appendChild(countdownEl);
+   countdownEl = makeDiv("countdown", "", "");
+countdownEl.style.pointerEvents = "none";
+countdownEl.style.display = "none";
+document.body.appendChild(countdownEl);
+
   }
   if (!lapEl) {
     lapEl = makeDiv("lap", "", "");
