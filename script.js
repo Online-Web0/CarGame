@@ -2,11 +2,11 @@
 // Works with the provided index.html / style.css structure in your project.
 
 // ====== TUNING (your values kept) ======
-var SPEED = 0.004;
+var SPEED = 1.004;
 var CAMERA_LAG = 0.82;
 var COLLISION = 1.1;        // kept (used only for optional player collisions)
 var BOUNCE = 0.7;
-var mapscale = 50;
+var mapscale = 500;
 var VR = false;
 var BOUNCE_CORRECT = 0.01;
 var WALL_SIZE = 1.2;
@@ -15,7 +15,7 @@ var OOB_DIST = 200;
 var LAPS = 3;
 
 // New tuning
-var MAX_SPEED = 0.9;
+var MAX_SPEED = 5.9;
 var STEER_MIN = 0.05;
 var STEER_SPEED = 0.12;
 var CAM_HEIGHT = 4;
