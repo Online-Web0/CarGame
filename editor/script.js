@@ -288,7 +288,7 @@ function imp(){
 
 		arrows.push({
 			x: parseInt(t[0].split(",")[0]) + Math.floor(width / scale / 2),
-			y: -parseInt(t[0].split(",")[2]) + Math.floor(height / scale / 2),
+			y: -parseInt(t[0].split(",")[1]) + Math.floor(height / scale / 2),
 			angle: (90 - parseInt(t[1])) * Math.PI / 180
 		});
 	}
