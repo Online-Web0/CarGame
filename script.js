@@ -696,9 +696,7 @@ function showModeMenu() {
   var nm = (nameEl && nameEl.value ? nameEl.value : "").trim();
   if (!nm && nameEl) nameEl.value = "Player";
 
-  if (titleEl) {
-    titleEl.style.display = ""; // ensure visible for mode selection
-    titleEl.innerHTML = "Choose Mode";
+ 
   }
 
   modeWrapEl = document.createElement("div");
