@@ -937,8 +937,15 @@ function hostFlow() {
   codeEl.style.width = "100%";
   if (foreEl) foreEl.appendChild(codeEl);
 
-  var sg = makeDiv("startgame", "", "START GAME");
-  if (foreEl) foreEl.appendChild(sg);
+var sg = makeDiv("startgame", "", "START GAME");
+
+sg.style.bottom = "2vmin";   // lower button
+sg.style.right = "calc(50vw - 40vmin)";
+sg.style.width = "80vmin";
+sg.style.textAlign = "center";
+
+if (foreEl) foreEl.appendChild(sg);
+
 
   sg.onclick = function () {
     if (!roomRef) return;
