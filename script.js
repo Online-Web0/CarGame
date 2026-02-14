@@ -15,9 +15,13 @@ var OOB_DIST = 2000;
 var LAPS = 3;
 var NITRO_MULT = 2.2;
 var nitro = false;
+var NITRO_MAX = 100;
+var nitroFuel = 100;
+var NITRO_DRAIN = 35;   // per second
+var NITRO_REGEN = 18;   // per second
+var MAX_SPEED = 1.8; // tweak to taste
 
 // New tuning
-var MAX_SPEED = 0.36;
 var STEER_MIN = 0.05;
 var STEER_SPEED = 0.12;
 var CAM_HEIGHT = 4;
@@ -534,6 +538,26 @@ function computeSpawn() {
   spawnDir = Math.atan2(forward.x, forward.y);
 }
 
+var nitroBar = document.createElement("div");
+nitroBar.id = "nitrobar";
+nitroBar.style.position = "fixed";
+nitroBar.style.bottom = "20px";
+nitroBar.style.left = "50%";
+nitroBar.style.transform = "translateX(-50%)";
+nitroBar.style.width = "320px";
+nitroBar.style.height = "14px";
+nitroBar.style.background = "#222";
+nitroBar.style.border = "2px solid #fff";
+nitroBar.style.zIndex = "1000";
+
+var nitroFill = document.createElement("div");
+nitroFill.id = "nitrofill";
+nitroFill.style.height = "100%";
+nitroFill.style.width = "100%";
+nitroFill.style.background = "#00c8ff";
+
+nitroBar.appendChild(nitroFill);
+document.body.appendChild(nitroBar);
 
 // ====== Cars + labels ======
 function makeCar(hexColor) {
@@ -1162,13 +1186,23 @@ function updateMePhysics(warp) {
   me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
 
 
+if (usingNitro) {
+  nitroFuel -= NITRO_DRAIN * warp * 0.016;
+  if (nitroFuel < 0) nitroFuel = 0;
+} else {
+  nitroFuel += NITRO_REGEN * warp * 0.016;
+  if (nitroFuel > NITRO_MAX) nitroFuel = NITRO_MAX;
+}
+
+
+
 
   var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
 
   var brake = down ? 0.82 : 1.0;
 
-var ACCEL = SPEED * (nitro ? 5.0 : 2.0);
+var ACCEL = SPEED * (usingNitro ? 5.0 : 2.0);
 var FRICTION = 0.965;
 var DRAG = 0.992;
 
@@ -1186,7 +1220,7 @@ me.data.yv *= DRAG * brake;
 
 
   var velMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
- var topSpeed = nitro ? MAX_SPEED * 1.6 : MAX_SPEED;
+ var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
 
 if (velMag > topSpeed) {
   var s = topSpeed / velMag;
@@ -1350,14 +1384,27 @@ function updateLabels() {
 
 function updateHud() {
   if (!lapEl || !me || !me.data) return;
+
   var spd = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   var roomText = ROOM ? (" | " + ROOM) : "";
+
   lapEl.style.fontSize = "26px";
   lapEl.style.lineHeight = "28px";
-  lapEl.innerHTML = "Lap " + (me.data.lap <= LAPS ? (me.data.lap + "/" + LAPS) : "") + " | Spd " + spd.toFixed(2) + roomText;
+  lapEl.innerHTML =
+    "Lap " +
+    (me.data.lap <= LAPS ? (me.data.lap + "/" + LAPS) : "") +
+    " | Spd " + spd.toFixed(2) + roomText;
+
+  var fill = document.getElementById("nitrofill");
+  if (fill) {
+    fill.style.width = (nitroFuel / NITRO_MAX * 100) + "%";
+    fill.style.background =
+      nitroFuel < 20 ? "#ff3b3b" :
+      nitroFuel < 50 ? "#ffd43b" :
+      "#00c8ff";
+  }
 }
 
-function maybeSendToFirebase(ts) {
   if (!me || !me.ref) return;
   if (ts - me.lastSend < 60) return;
   me.lastSend = ts;
