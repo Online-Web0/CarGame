@@ -179,21 +179,16 @@ canvas {
 	        transform: scale(0.9) rotate(45deg) !important;
 	box-shadow: 0 0.5vmin 1vmin rgba(0, 0, 0, 0.5);
 }
-#toolbar{
-	width: 22vmin;
-	height: 85vmin;
-	border-radius: 11vmin;
-	background-color: rgba(0, 0, 0, 0.5);
-	position: absolute;
-	right: 1vmin;
-	bottom: 1vmin;
-	-webkit-transform: scaleY(0);
-	        transform: scaleY(0);
-	transition: -webkit-transform .5s;
-	transition: transform .5s;
-	transition: transform .5s, -webkit-transform .5s;
-	-webkit-transform-origin: 50% 87.5%;
-	        transform-origin: 50% 87.5%;
+#toolbar {
+	position: fixed;
+	bottom: 24vmin;
+	right: 2vmin;
+	z-index: 100;
+	display: flex;
+	flex-direction: column;
+	gap: 1vmin;
+}
+
 }
 #toolbar.sel{
 	-webkit-transform: scaleY(1);
