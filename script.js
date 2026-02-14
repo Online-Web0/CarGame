@@ -98,7 +98,7 @@ function collideWithPlayers() {
       var n = delta.normalize();
 
       // --- separate cars ---
-      var overlap = (radius * 2 - dist) * 0.5;
+      var overlap = (radius * 2 - dist) * 1.2;
 
       me.data.x += n.x * overlap;
       me.data.y += n.y * overlap;
@@ -113,7 +113,7 @@ function collideWithPlayers() {
       var relVel = myVel.clone().sub(otherVel);
 
       if (relVel.dot(n) < 0) {
-        var impulse = relVel.dot(n) * 0.8;
+        var impulse = relVel.dot(n) * 1.6;
 
         me.data.xv -= n.x * impulse;
         me.data.yv -= n.y * impulse;
