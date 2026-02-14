@@ -5,7 +5,7 @@
 var SPEED = .016;
 var CAMERA_LAG = 0.82;
 var COLLISION = 1.1;        // kept (used only for optional player collisions)
-var BOUNCE = 1.15;
+var BOUNCE = 1.25;
 var mapscale = 500;
 var VR = false;
 var BOUNCE_CORRECT = 0.01;
@@ -79,6 +79,9 @@ var playerCollisionEnabled = false;
 function collideWithPlayers() {
   if (!playerCollisionEnabled || !me) return;
 
+  var pPos = vec2(me.data.x, me.data.y);
+  var pVel = vec2(me.data.xv, me.data.yv);
+
   var radius = 0.95;
 
   for (var k in players) {
@@ -88,44 +91,39 @@ function collideWithPlayers() {
     var p = players[k];
     if (!p || !p.data) continue;
 
-    var dx = me.data.x - p.data.x;
-    var dy = me.data.y - p.data.y;
+    var oPos = vec2(p.data.x, p.data.y);
+    var oVel = vec2(p.data.xv || 0, p.data.yv || 0);
 
-    var dist = Math.sqrt(dx * dx + dy * dy);
+    var delta = pPos.clone().sub(oPos);
+    var dist = delta.length();
     if (dist === 0) continue;
 
-    var minDist = radius * 2;
+    if (dist < radius * 2) {
+      var n = delta.normalize();
 
-    if (dist < minDist) {
-      var nx = dx / dist;
-      var ny = dy / dist;
+      // --- separate cars (like wall correction) ---
+      var overlap = radius * 2 - dist;
+      pPos.add(n.clone().multiplyScalar(overlap));
 
-      var overlap = minDist - dist;
-
-      // separate cars
-      me.data.x += nx * overlap * 0.5;
-      me.data.y += ny * overlap * 0.5;
-
-      p.data.x -= nx * overlap * 0.5;
-      p.data.y -= ny * overlap * 0.5;
-
-      // bounce velocities
-      var rvx = me.data.xv - (p.data.xv || 0);
-      var rvy = me.data.yv - (p.data.yv || 0);
-
-      var impulse = rvx * nx + rvy * ny;
-
-      if (impulse < 0) {
-        var bounce = 1.1;
-
-        me.data.xv -= nx * impulse * bounce;
-        me.data.yv -= ny * impulse * bounce;
-
-        p.data.xv += nx * impulse * bounce;
-        p.data.yv += ny * impulse * bounce;
+      // --- reflect MY velocity like a wall ---
+      if (pVel.dot(n) < 0) {
+        pVel = reflect2(pVel, n);
+        pVel.multiplyScalar(BOUNCE);
       }
+
+      // --- push the other car slightly ---
+      p.data.x -= n.x * overlap * 0.5;
+      p.data.y -= n.y * overlap * 0.5;
+
+      p.data.xv -= n.x * 0.12;
+      p.data.yv -= n.y * 0.12;
     }
   }
+
+  me.data.x = pPos.x;
+  me.data.y = pPos.y;
+  me.data.xv = pVel.x;
+  me.data.yv = pVel.y;
 }
 
 
