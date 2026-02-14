@@ -148,20 +148,17 @@ canvas {
 	height: 20vmin;
 	width: 20vmin;
 	background-color: #6eb0ea;
-	position: absolute;
+	position: fixed;
 	bottom: 2vmin;
 	right: 2vmin;
 	opacity: 1;
 	border-radius: 10vmin;
 	cursor: pointer;
 	box-shadow: 0 2vmin 3vmin rgba(0, 0, 0, 0.5);
-	transition: box-shadow .2s, background .2s, -webkit-transform .2s;
 	transition: transform .2s, box-shadow .2s, background .2s;
-	transition: transform .2s, box-shadow .2s, background .2s, -webkit-transform .2s;
-	-webkit-transform: translate3d(50vw, 0, 0);
-	        transform: translate3d(50vw, 0, 0);
 	z-index: 100;
 }
+
 #settings::after{
 	content: "";
 	background-image: url("https://jchabin.github.io/cars/gear.png");
