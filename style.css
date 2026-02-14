@@ -186,7 +186,7 @@ canvas {
 
 	position: absolute;
 	right: 1vmin;
-	bottom: 22vmin;   /* sits just above the gear */
+	bottom: 18vmin;   /* sits just above the gear */
 
 	transform: scaleY(0);
 	transform-origin: bottom center;
