@@ -1,6 +1,5 @@
-// CarGame - rebuilt script.js (fixed single file)
-// Dependencies: three.js required, firebase optional.
-// Works with provided index.html / style.css structure.
+// CarGame - rebuilt script.js (single file, no dependencies beyond three.js + firebase)
+// Works with the provided index.html / style.css structure in your project.
 
 // ====== TUNING (your values kept) ======
 var SPEED = 0.004;
@@ -59,11 +58,8 @@ var ground;
 
 // ====== Map physics data ======
 var wallSegs = [];  // {a:V2,b:V2,dir:V2,len2:number,mesh:Mesh}
-var cpSegs = [];    // start + checkpoint segments
+var cpSegs = [];    // [0]=start, [1]=checkpoint {a,b,dir,len2,normal:V2,mesh}
 var spawnX = 0, spawnY = 0, spawnDir = 0;
-
-// dynamic OOB limit (auto-expanded when map loads)
-var oobLimit = OOB_DIST;
 
 // ====== Multiplayer/game state ======
 var ROOM = null;
@@ -96,23 +92,18 @@ var color = "#ff3030";
 
 // ====== Utility ======
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
 function safeRemove(el) { if (!el) return; try { el.remove(); } catch (e) {} }
-function vec2(x, y) { return new THREE.Vector2(x, y); }
 
-function escapeHtml(s) {
-  s = String(s == null ? "" : s);
-  return s.replace(/[&<>"']/g, function (c) {
-    return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
-  });
-}
-
-function makeDiv(id, className, html) {
+function makeDiv(id, className, text) {
   var d = document.createElement("div");
   if (id) d.id = id;
   if (className) d.className = className;
-  if (typeof html === "string") d.innerHTML = html;
+  if (typeof text === "string") d.innerHTML = text;
   return d;
 }
+
+function vec2(x, y) { return new THREE.Vector2(x, y); }
 
 function reflect2(v, n) {
   // v,n are Vector2, n must be unit
@@ -160,16 +151,13 @@ function setTrackCode(str) {
   el.textContent = (str || "").trim();
   buildMapFromTrackCode(getTrackCode());
 }
+
+// Expose for console usage
 window.setTrackCode = setTrackCode;
 
 // ====== Engine init ======
 function ensureEngine() {
-  if (scene && renderer && mapGroup && cpGroup) return true;
-
-  if (typeof THREE === "undefined") {
-    console.error("THREE is not loaded. Make sure three.js loads before script.js");
-    return false;
-  }
+  if (scene && renderer && mapGroup && cpGroup) return;
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x7fb0ff);
@@ -180,7 +168,7 @@ function ensureEngine() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  // Put canvas behind UI
+  // Put canvas behind UI (and do NOT block clicks)
   renderer.domElement.style.position = "fixed";
   renderer.domElement.style.top = "0";
   renderer.domElement.style.left = "0";
@@ -236,6 +224,22 @@ function ensureEngine() {
   settingsEl = document.getElementById("settings");
   toolbarEl = document.getElementById("toolbar");
 
+  // Pin gear + toolbar so they're always accessible
+  if (settingsEl) {
+    settingsEl.style.position = "fixed";
+    settingsEl.style.top = "10px";
+    settingsEl.style.right = "10px";
+    settingsEl.style.zIndex = "20";
+  }
+  if (toolbarEl) {
+    toolbarEl.style.position = "fixed";
+    toolbarEl.style.top = "60px";
+    toolbarEl.style.right = "10px";
+    toolbarEl.style.zIndex = "20";
+    toolbarEl.style.maxHeight = "70vh";
+    toolbarEl.style.overflowY = "auto";
+  }
+
   countdownEl = document.getElementById("countdown");
   lapEl = document.getElementById("lap");
 
@@ -244,7 +248,10 @@ function ensureEngine() {
     countdownEl.style.pointerEvents = "none";
     countdownEl.style.display = "none";
     document.body.appendChild(countdownEl);
+  } else {
+    countdownEl.style.pointerEvents = "none";
   }
+
   if (!lapEl) {
     lapEl = makeDiv("lap", "", "");
     document.body.appendChild(lapEl);
@@ -261,7 +268,6 @@ function ensureEngine() {
 
   window.addEventListener("resize", onResize, false);
   window.addEventListener("orientationchange", onResize, false);
-  return true;
 }
 
 function onResize() {
@@ -278,7 +284,7 @@ function clearGroup(g) {
 }
 
 function buildMapFromTrackCode(track) {
-  if (!ensureEngine()) return;
+  ensureEngine();
 
   clearGroup(mapGroup);
   clearGroup(cpGroup);
@@ -289,7 +295,6 @@ function buildMapFromTrackCode(track) {
   track = (track || "").trim();
   if (!track) {
     spawnX = 0; spawnY = 0; spawnDir = 0;
-    oobLimit = OOB_DIST;
     return;
   }
 
@@ -298,7 +303,6 @@ function buildMapFromTrackCode(track) {
   var checkPart = (parts[1] || "").trim();
   var treesPart = (parts[2] || "").trim();
 
-  // collect bounds
   var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
   function includePt(p) {
     minX = Math.min(minX, p.x);
@@ -307,7 +311,6 @@ function buildMapFromTrackCode(track) {
     maxY = Math.max(maxY, p.y);
   }
 
-  // Walls
   var wallTokens = wallsPart.split(/\s+/).filter(Boolean);
   for (var i = 0; i < wallTokens.length; i++) {
     var seg = parseSeg(wallTokens[i]);
@@ -316,7 +319,6 @@ function buildMapFromTrackCode(track) {
     addWall(seg.a, seg.b);
   }
 
-  // Checkpoints
   var cpTokens = checkPart.split(/\s+/).filter(Boolean);
   for (var j = 0; j < cpTokens.length; j++) {
     var cseg = parseSeg(cpTokens[j]);
@@ -325,7 +327,6 @@ function buildMapFromTrackCode(track) {
     addCheckpoint(cseg.a, cseg.b, j === 0);
   }
 
-  // Trees
   var treeTokens = treesPart.split(/\s+/).filter(Boolean);
   for (var t = 0; t < treeTokens.length; t++) {
     var tp = parseV2(treeTokens[t]);
@@ -334,7 +335,6 @@ function buildMapFromTrackCode(track) {
     addTree(tp.x, tp.y);
   }
 
-  // resize ground + update OOB limit based on map size
   if (minX < 1e8) {
     var pad = 20;
     var w = (maxX - minX) + pad;
@@ -342,16 +342,13 @@ function buildMapFromTrackCode(track) {
     w = Math.max(w, 120);
     h = Math.max(h, 120);
 
-    if (ground && ground.geometry) ground.geometry.dispose();
-    var gGeo = new THREE.PlaneGeometry(w, h);
-    gGeo.rotateX(-Math.PI / 2);
-    ground.geometry = gGeo;
+    ground.geometry.dispose();
+    var gg = new THREE.PlaneGeometry(w, h);
+    gg.rotateX(-Math.PI / 2);
+    ground.geometry = gg;
     ground.position.set((minX + maxX) / 2, 0, (minY + maxY) / 2);
-
-    oobLimit = Math.max(OOB_DIST, Math.max(w, h) * 0.85 + 60);
   } else {
     ground.position.set(0, 0, 0);
-    oobLimit = OOB_DIST;
   }
 
   computeSpawn();
@@ -396,7 +393,6 @@ function addCheckpoint(a2, b2, isStart) {
   var mid = a.clone().add(b).multiplyScalar(0.5);
   var width = Math.sqrt(len2);
 
-  // unit normal (perp)
   var n = vec2(ab.y, -ab.x);
   if (n.lengthSq() < 1e-9) n = vec2(0, 1);
   n.normalize();
@@ -405,12 +401,12 @@ function addCheckpoint(a2, b2, isStart) {
   var mat = new THREE.MeshStandardMaterial({ color: isStart ? 0xffffff : 0xffe100, roughness: 0.8 });
   var mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
-
   var ang = Math.atan2((b.y - a.y), (b.x - a.x));
   mesh.rotation.y = -ang;
   mesh.position.set(mid.x, 0.05, mid.y);
 
   cpGroup.add(mesh);
+
   cpSegs.push({ a: a, b: b, dir: ab, len2: len2, normal: n, mid: mid, mesh: mesh });
 }
 
@@ -451,14 +447,12 @@ function computeSpawn() {
   spawnX = start.mid.x + forward.x * 3;
   spawnY = start.mid.y + forward.y * 3;
 
-  // physics convention: xv += sin(dir), yv += cos(dir)
   spawnDir = Math.atan2(forward.x, forward.y);
 }
 
 // ====== Cars + labels ======
 function makeCar(hexColor) {
   var car = new THREE.Object3D();
-  car.userData = car.userData || {};
 
   var bodyGeo = new THREE.BoxGeometry(1.6, 0.6, 2.6);
   var bodyMat = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.7, metalness: 0.05 });
@@ -501,10 +495,6 @@ function makeCar(hexColor) {
   var backRight = wheelMesh();
   backRight.position.set(0.75, 0.35, -0.85);
   car.add(backRight);
-
-  // store wheel refs (fixes the old "children[0]" bug)
-  car.userData.frontLeft = frontLeft;
-  car.userData.frontRight = frontRight;
 
   return car;
 }
@@ -604,7 +594,7 @@ function setupColorPickerOnce() {
   setupColorPickerOnce._did = true;
   if (!pickerEl || !sliderEl) return;
 
-  requestAnimationFrame(function(){ setSliderFrom01(0.02); });
+  requestAnimationFrame(function () { setSliderFrom01(0.02); });
 
   var dragging = false;
 
@@ -626,14 +616,14 @@ function setupColorPickerOnce() {
 
 // ====== Menu + flow ======
 function animateMenuIn() {
-  if (titleEl) setTimeout(function(){ titleEl.style.transform = "translate3d(0, 0, 0)"; }, 10);
+  if (titleEl) setTimeout(function () { titleEl.style.transform = "translate3d(0, 0, 0)"; }, 10);
   var items = document.getElementsByClassName("menuitem");
   for (var i = 0; i < items.length; i++) {
-    (function(idx){
-      setTimeout(function(){ items[idx].style.transform = "translate3d(0, 0, 0)"; }, 120 + idx * 90);
+    (function (idx) {
+      setTimeout(function () { items[idx].style.transform = "translate3d(0, 0, 0)"; }, 120 + idx * 90);
     })(i);
   }
-  if (settingsEl) setTimeout(function(){ settingsEl.style.transform = "translate3d(0, 0, 0)"; }, 500);
+  if (settingsEl) setTimeout(function () { settingsEl.style.transform = "translate3d(0, 0, 0)"; }, 500);
 }
 
 function clearModeUI() {
@@ -657,14 +647,13 @@ function showOverlayMsg(html) {
     overlayMsgEl.style.zIndex = "100000";
     foreEl.appendChild(overlayMsgEl);
   }
-  overlayMsgEl.innerHTML = html || "";
+  overlayMsgEl.innerHTML = html;
 }
 
 function showModeMenu() {
-  if (!ensureEngine()) return;
+  ensureEngine();
   setupInputOnce();
   setupColorPickerOnce();
-
   clearModeUI();
 
   var nm = (nameEl && nameEl.value ? nameEl.value : "").trim();
@@ -682,23 +671,33 @@ function showModeMenu() {
     b.style.top = "calc(" + topVh + "vh - 8vmin)";
     b.onclick = onClick;
     modeWrapEl.appendChild(b);
-    setTimeout(function(){ b.style.transform = "translate3d(0,0,0)"; }, 20);
+    setTimeout(function () { b.style.transform = "translate3d(0,0,0)"; }, 20);
     return b;
   }
 
-  mkButton("HOST", 30, function(){ hostFlow(); });
-  mkButton("JOIN", 55, function(){ joinFlow(); });
-  mkButton("SOLO", 80, function(){ soloFlow(); });
+  mkButton("HOST", 30, function () { hostFlow(); });
+  mkButton("JOIN", 55, function () { joinFlow(); });
+  mkButton("SOLO", 80, function () { soloFlow(); });
 }
 
+// HIDE ALL main menu items once game starts (fixes your issue)
 function hideMainMenu() {
   if (!foreEl) return;
 
+  // Hide anything tagged menuitem
+  var items = document.getElementsByClassName("menuitem");
+  for (var i = 0; i < items.length; i++) {
+    items[i].style.display = "none";
+  }
+
+  // Also hide known menu IDs (safe even if missing)
   var ids = ["title", "name", "colorpicker", "start", "divider", "mywebsitelink"];
-  for (var i = 0; i < ids.length; i++) {
-    var el = document.getElementById(ids[i]);
+  for (var j = 0; j < ids.length; j++) {
+    var el = document.getElementById(ids[j]);
     if (el) el.style.display = "none";
   }
+
+  // Remove any mode UI overlays
   clearModeUI();
 }
 
@@ -709,7 +708,7 @@ function setupToolbarOnce() {
 
   if (!settingsEl || !toolbarEl) return;
 
-  settingsEl.onclick = function(){
+  settingsEl.onclick = function () {
     if (toolbarEl.classList.contains("sel")) toolbarEl.classList.remove("sel");
     else toolbarEl.classList.add("sel");
   };
@@ -721,33 +720,33 @@ function setupToolbarOnce() {
     t.className = "tools";
     if (bg) t.style.backgroundColor = bg;
     t.title = title;
-    t.onclick = function(e){ e.stopPropagation(); onClick(); };
+    t.onclick = function (e) { e.stopPropagation(); onClick(); };
     toolbarEl.appendChild(t);
     return t;
   }
 
-  toolButton("Open editor", "#55db8f", function(){
+  toolButton("Open editor", "#55db8f", function () {
     window.open("./editor/", "_blank");
   });
 
-  toolButton("Import map code", "#db6262", function(){
+  toolButton("Import map code", "#db6262", function () {
     var cur = getTrackCode();
     var str = prompt("Paste trackcode here (exported from /editor).", cur);
     if (typeof str === "string" && str.trim()) {
       setTrackCode(str);
       showOverlayMsg("Map imported.");
-      setTimeout(function(){ showOverlayMsg(""); }, 1200);
+      setTimeout(function () { showOverlayMsg(""); }, 1200);
     }
   });
 
-  toolButton("Export map code", "#9a55db", function(){
+  toolButton("Export map code", "#9a55db", function () {
     var str = getTrackCode();
     if (!str) return;
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(str).then(function(){
+      navigator.clipboard.writeText(str).then(function () {
         showOverlayMsg("Map code copied to clipboard.");
-        setTimeout(function(){ showOverlayMsg(""); }, 1200);
-      }).catch(function(){
+        setTimeout(function () { showOverlayMsg(""); }, 1200);
+      }).catch(function () {
         prompt("Copy trackcode:", str);
       });
     } else {
@@ -775,7 +774,7 @@ function clearPlayers() {
   for (var k in players) {
     if (!players.hasOwnProperty(k)) continue;
     var p = players[k];
-    if (p && p.model && scene) scene.remove(p.model);
+    if (p && p.model) scene.remove(p.model);
     if (p && p.label) safeRemove(p.label);
   }
   players = {};
@@ -784,7 +783,7 @@ function clearPlayers() {
 }
 
 function connectToRoom(code, hostFlag) {
-  if (!ensureEngine()) return;
+  ensureEngine();
 
   detachRoomListeners();
   clearPlayers();
@@ -794,7 +793,7 @@ function connectToRoom(code, hostFlag) {
 
   if (!database) {
     showOverlayMsg("Firebase unavailable. Running SOLO.");
-    setTimeout(function(){ showOverlayMsg(""); }, 1500);
+    setTimeout(function () { showOverlayMsg(""); }, 1500);
     soloFlow();
     return;
   }
@@ -889,6 +888,7 @@ function upsertPlayer(key, data) {
     scene.add(model);
 
     var label = makeLabel(data.name || "Player");
+
     p = { key: key, ref: playersRef.child(key), data: data, model: model, label: label, isMe: false };
     players[key] = p;
   } else {
@@ -900,7 +900,7 @@ function upsertPlayer(key, data) {
 function removePlayer(key) {
   var p = players[key];
   if (!p) return;
-  if (p.model && scene) scene.remove(p.model);
+  if (p.model) scene.remove(p.model);
   if (p.label) safeRemove(p.label);
   delete players[key];
 }
@@ -922,8 +922,8 @@ function hostFlow() {
   var sg = makeDiv("startgame", "", "START GAME");
   if (foreEl) foreEl.appendChild(sg);
 
-  sg.onclick = function(){
-    if (!roomRef || typeof firebase === "undefined") return;
+  sg.onclick = function () {
+    if (!roomRef) return;
     roomRef.child("startedAt").set(firebase.database.ServerValue.TIMESTAMP);
   };
 
@@ -940,6 +940,7 @@ function joinFlow() {
   inEl.autocomplete = "off";
   inEl.spellcheck = false;
   inEl.value = "";
+
   if (foreEl) foreEl.appendChild(inEl);
   inEl.focus();
 
@@ -956,14 +957,13 @@ function joinFlow() {
     connectToRoom(code, false);
   }
 
-  inEl.addEventListener("input", function(){ inEl.value = inEl.value.toUpperCase(); });
-  inEl.addEventListener("keydown", function(e){ if (e.key === "Enter") doJoin(); });
+  inEl.addEventListener("input", function () { inEl.value = inEl.value.toUpperCase(); });
+  inEl.addEventListener("keydown", function (e) { if (e.key === "Enter") doJoin(); });
   joinBtn.onclick = doJoin;
 }
 
 function soloFlow() {
-  if (!ensureEngine()) return;
-
+  ensureEngine();
   clearPlayers();
   detachRoomListeners();
   ROOM = null;
@@ -1006,11 +1006,11 @@ function startGame() {
   hideMainMenu();
   showOverlayMsg("");
 
-  startCountdown(function(){});
+  startCountdown();
 }
 
-// ====== FIXED countdown (single definition, no nested duplicate, no stray commas) ======
-function startCountdown(done) {
+// SINGLE correct countdown (no duplicates)
+function startCountdown() {
   gameSortaStarted = true;
   var t = 3;
 
@@ -1032,11 +1032,11 @@ function startCountdown(done) {
       }
 
       gameSortaStarted = false;
-      if (done) done();
       return;
     }
 
     if (countdownEl) {
+      countdownEl.style.display = "block";
       countdownEl.innerHTML = String(t);
     }
   }, 1000);
@@ -1046,11 +1046,12 @@ function startCountdown(done) {
 function updateMePhysics(warp) {
   if (!me || !me.data || !me.model) return;
 
-  // steering input (works for BOTH desktop + mobile now)
-  if (left) me.data.steer = Math.PI / 6;
-  if (right) me.data.steer = -Math.PI / 6;
-  if (!(left ^ right)) me.data.steer = 0;
-  me.data.steer = clamp(me.data.steer, -Math.PI/6, Math.PI/6);
+  if (!mobile) {
+    if (left) me.data.steer = Math.PI / 6;
+    if (right) me.data.steer = -Math.PI / 6;
+    if (!(left ^ right)) me.data.steer = 0;
+  }
+  me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
 
   var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
@@ -1084,8 +1085,7 @@ function updateMePhysics(warp) {
   collideMeWithWalls();
   handleCheckpoints();
 
-  // OOB reset (dynamic oobLimit)
-  if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > oobLimit) {
+  if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
     me.data.x = spawnX;
     me.data.y = spawnY;
     me.data.xv = 0;
@@ -1097,11 +1097,8 @@ function updateMePhysics(warp) {
   me.model.position.z = me.data.y;
   me.model.rotation.y = me.data.dir;
 
-  // wheel visuals (fixed to use stored wheel refs)
-  var fl = me.model.userData && me.model.userData.frontLeft;
-  var fr = me.model.userData && me.model.userData.frontRight;
-  if (fl) fl.rotation.z = Math.PI/2 - me.data.steer;
-  if (fr) fr.rotation.z = Math.PI/2 - me.data.steer;
+  if (me.model.children[0]) me.model.children[0].rotation.z = Math.PI / 2 - me.data.steer;
+  if (me.model.children[1]) me.model.children[1].rotation.z = Math.PI / 2 - me.data.steer;
 }
 
 function collideMeWithWalls() {
@@ -1138,9 +1135,9 @@ function handleCheckpoints() {
     var cp = cpSegs[i];
 
     var ab = cp.b.clone().sub(cp.a);
-    var t = 0;
-    if (cp.len2 > 1e-9) t = clamp(pos.clone().sub(cp.a).dot(ab) / cp.len2, 0, 1);
-    var closest = cp.a.clone().add(ab.multiplyScalar(t));
+    var tt = 0;
+    if (cp.len2 > 1e-9) tt = clamp(pos.clone().sub(cp.a).dot(ab) / cp.len2, 0, 1);
+    var closest = cp.a.clone().add(ab.multiplyScalar(tt));
 
     var dist = pos.distanceTo(closest);
     if (dist > 1.1) continue;
@@ -1157,7 +1154,7 @@ function handleCheckpoints() {
 
   if (me.data.lap > LAPS && countdownEl && countdownEl.innerHTML === "") {
     countdownEl.style.fontSize = "14vmin";
-    countdownEl.innerHTML = escapeHtml(me.data.name || "Player") + " Won!";
+    countdownEl.innerHTML = (me.data.name || "Player").replace(/</g, "&lt;") + " Won!";
   }
 }
 
@@ -1194,7 +1191,7 @@ function updateRemoteVisuals(warp) {
     p.model.position.z += (ty - p.model.position.z) * clamp(0.18 * warp, 0, 1);
 
     var cur = p.model.rotation.y;
-    var diff = ((tdir - cur + Math.PI) % (2*Math.PI)) - Math.PI;
+    var diff = ((tdir - cur + Math.PI) % (2 * Math.PI)) - Math.PI;
     p.model.rotation.y = cur + diff * clamp(0.25 * warp, 0, 1);
   }
 }
@@ -1218,10 +1215,9 @@ function updateLabels() {
 
 function updateHud() {
   if (!lapEl || !me || !me.data) return;
-  var spd = Math.sqrt(me.data.xv*me.data.xv + me.data.yv*me.data.yv);
+  var spd = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   var roomText = ROOM ? (" | " + ROOM) : "";
-  var lapText = (me.data.lap <= LAPS) ? (me.data.lap + "/" + LAPS) : "";
-  lapEl.innerHTML = "Lap " + lapText + "<br>Speed " + spd.toFixed(2) + roomText;
+  lapEl.innerHTML = "Lap " + (me.data.lap <= LAPS ? (me.data.lap + "/" + LAPS) : "") + "<br>Speed " + spd.toFixed(2) + roomText;
 }
 
 function maybeSendToFirebase(ts) {
@@ -1251,23 +1247,21 @@ function renderLoop(ts) {
     updateCamera(warp);
     updateHud();
     maybeSendToFirebase(ts);
-  } else if (camera) {
+  } else {
     var a = ts * 0.0004;
     camera.position.set(50 * Math.sin(a), 20, 50 * Math.cos(a));
-    camera.lookAt(new THREE.Vector3(0,0,0));
+    camera.lookAt(new THREE.Vector3(0, 0, 0));
     updateRemoteVisuals(warp);
   }
 
   updateLabels();
-
-  if (renderer && scene && camera) renderer.render(scene, camera);
+  renderer.render(scene, camera);
   MODS();
 }
 
 // ====== Init ======
 function init() {
-  if (!ensureEngine()) return;
-
+  ensureEngine();
   if (foreEl) foreEl.style.pointerEvents = "auto";
 
   setupToolbarOnce();
@@ -1282,14 +1276,13 @@ function init() {
   requestAnimationFrame(renderLoop);
 }
 
-// Run init once DOM is ready
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
 } else {
   init();
 }
 
-// ====== Compatibility with existing HTML inline onclick handlers ======
+// ====== Compatibility with your existing HTML inline onclick handlers ======
 window.menu2 = showModeMenu;
 window.host = hostFlow;
 window.joinGame = joinFlow;
@@ -1297,7 +1290,7 @@ window.codeCheck = function () {};
 window.updateColor = function (x01) { setSliderFrom01(x01); };
 
 // Clean up firebase presence on close
-window.addEventListener("beforeunload", function(){
+window.addEventListener("beforeunload", function () {
   try {
     if (me && me.ref) me.ref.remove();
   } catch (e) {}
