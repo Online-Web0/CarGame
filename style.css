@@ -145,7 +145,7 @@ canvas {
 	        transform: translate(-4.5vmin, -2vmin) scale(1.2);
 }
 #settings{
-	height: 30vmin;
+	height: 20vmin;
 	width: 20vmin;
 	background-color: #6eb0ea;
 	position: absolute;
@@ -166,16 +166,13 @@ canvas {
 	content: "";
 	background-image: url("https://jchabin.github.io/cars/gear.png");
 	background-size: cover;
-	height: 10vmin;
-	width: 10vmin;
+	height: 8vmin;
+	width: 8vmin;
 	position: absolute;
-	bottom: 5vmin;
-	left: 5vmin;
-	-webkit-filter: invert(1);
-	        filter: invert(1);
-	transition: -webkit-transform .2s;
+	top: 0;
+	right: 0;
+	filter: invert(1);
 	transition: transform .2s;
-	transition: transform .2s, -webkit-transform .2s;
 }
 #settings:hover{
 	-webkit-transform: scale(0.9) rotate(45deg) !important;
