@@ -1173,10 +1173,19 @@ var FRICTION = 0.965;
 var DRAG = 0.992;
 
 // Only accelerate when pressing UP / W
+var REVERSE_ACCEL = ACCEL * 0.6;   // slower than forward
+var MAX_REVERSE = MAX_SPEED * 0.45;
+
 if (up) {
   me.data.xv += Math.sin(me.data.dir) * ACCEL * warp;
   me.data.yv += Math.cos(me.data.dir) * ACCEL * warp;
 }
+
+if (down) {
+  me.data.xv -= Math.sin(me.data.dir) * REVERSE_ACCEL * warp;
+  me.data.yv -= Math.cos(me.data.dir) * REVERSE_ACCEL * warp;
+}
+
 
 me.data.xv *= Math.pow(FRICTION, warp);
 me.data.yv *= Math.pow(FRICTION, warp);
@@ -1185,14 +1194,25 @@ me.data.xv *= DRAG * brake;
 me.data.yv *= DRAG * brake;
 
 
-  var velMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
- var topSpeed = nitro ? MAX_SPEED * 1.6 : MAX_SPEED;
+ var velMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+var forwardSpeed =
+  me.data.xv * Math.sin(me.data.dir) +
+  me.data.yv * Math.cos(me.data.dir);
 
-if (velMag > topSpeed) {
-  var s = topSpeed / velMag;
+var topSpeed = nitro ? MAX_SPEED * 1.6 : MAX_SPEED;
+
+if (forwardSpeed > topSpeed) {
+  var s = topSpeed / forwardSpeed;
   me.data.xv *= s;
   me.data.yv *= s;
 }
+
+if (forwardSpeed < -MAX_REVERSE) {
+  var s = MAX_REVERSE / Math.abs(forwardSpeed);
+  me.data.xv *= s;
+  me.data.yv *= s;
+}
+
 
 
 me.data.x += me.data.xv * warp;
