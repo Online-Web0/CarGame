@@ -1067,7 +1067,7 @@ function updateMePhysics(warp) {
   var throttle = up ? 1.0 : 0.65;
   var brake = down ? 0.82 : 1.0;
 
-  var ACCEL = SPEED * 2.0 * throttle;
+  var ACCEL = SPEED * 3.0 * throttle;
   var FRICTION = 0.765;
   var DRAG = 0.792;
 
