@@ -1161,21 +1161,24 @@ function updateMePhysics(warp) {
   var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
 
-  var throttle = up ? 1.0 : 0.65;
   var brake = down ? 0.82 : 1.0;
 
-  var ACCEL = SPEED * 3.0 * throttle;
-  var FRICTION = 0.965;
-  var DRAG = 0.992;
+var ACCEL = SPEED * 3.0;
+var FRICTION = 0.965;
+var DRAG = 0.992;
 
+// Only accelerate when pressing UP / W
+if (up) {
   me.data.xv += Math.sin(me.data.dir) * ACCEL * warp;
   me.data.yv += Math.cos(me.data.dir) * ACCEL * warp;
+}
 
-  me.data.xv *= Math.pow(FRICTION, warp);
-  me.data.yv *= Math.pow(FRICTION, warp);
+me.data.xv *= Math.pow(FRICTION, warp);
+me.data.yv *= Math.pow(FRICTION, warp);
 
-  me.data.xv *= DRAG * brake;
-  me.data.yv *= DRAG * brake;
+me.data.xv *= DRAG * brake;
+me.data.yv *= DRAG * brake;
+
 
   var velMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   if (velMag > MAX_SPEED) {
