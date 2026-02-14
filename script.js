@@ -183,6 +183,7 @@ function hideAllMenusForGameplay() {
   clearModeUI();
   setDisplay("title", "none");
   hideLobbyUI();
+  if (settingsEl) settingsEl.style.display = "none";
 }
 
 // ====== Engine init ======
@@ -1104,8 +1105,8 @@ function updateMePhysics(warp) {
   me.model.position.z = me.data.y;
   me.model.rotation.y = me.data.dir;
 
-  if (me.model.children[0]) me.model.children[0].rotation.z = Math.PI / 2 - me.data.steer;
-  if (me.model.children[1]) me.model.children[1].rotation.z = Math.PI / 2 - me.data.steer;
+  if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
+  if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
 }
 
 function collideMeWithWalls() {
@@ -1224,7 +1225,9 @@ function updateHud() {
   if (!lapEl || !me || !me.data) return;
   var spd = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   var roomText = ROOM ? (" | " + ROOM) : "";
-  lapEl.innerHTML = "Lap " + (me.data.lap <= LAPS ? (me.data.lap + "/" + LAPS) : "") + "<br>Speed " + spd.toFixed(2) + roomText;
+  lapEl.style.fontSize = "12px";
+  lapEl.style.lineHeight = "14px";
+  lapEl.innerHTML = "Lap " + (me.data.lap <= LAPS ? (me.data.lap + "/" + LAPS) : "") + " | Spd " + spd.toFixed(2) + roomText;
 }
 
 function maybeSendToFirebase(ts) {
