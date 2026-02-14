@@ -1406,25 +1406,12 @@ function updateLabels() {
 
 function updateHud() {
   if (!lapEl || !me || !me.data) return;
-
   var spd = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   var roomText = ROOM ? (" | " + ROOM) : "";
-
   lapEl.style.fontSize = "26px";
   lapEl.style.lineHeight = "28px";
-  lapEl.innerHTML =
-    "Lap " +
-    (me.data.lap <= LAPS ? (me.data.lap + "/" + LAPS) : "") +
-    " | Spd " + spd.toFixed(2) +
-    roomText;
-
-  // --- Nitro bar update ---
-  var fill = document.getElementById("nitrofill");
-  if (fill) {
-    fill.style.width = ((nitroFuel / NITRO_MAX) * 100) + "%";
-  }
+  lapEl.innerHTML = "Lap " + (me.data.lap <= LAPS ? (me.data.lap + "/" + LAPS) : "") + " | Spd " + spd.toFixed(2) + roomText;
 }
-
 
 function maybeSendToFirebase(ts) {
   if (!me || !me.ref) return;
@@ -1434,7 +1421,9 @@ function maybeSendToFirebase(ts) {
   me.data.lastSeen = Date.now();
   me.ref.set(me.data);
 }
-
+var fill = document.getElementById("nitrofill");
+if (fill) {
+  fill.style.width = ((nitroFuel / NITRO_MAX) * 100) + "%";
 }
 
 // ====== Main loop ======
