@@ -11,7 +11,7 @@ var VR = false;
 var BOUNCE_CORRECT = 0.01;
 var WALL_SIZE = 1.2;
 var MOUNTAIN_DIST = 2500;
-var OOB_DIST = 200;
+var OOB_DIST = 2000;
 var LAPS = 3;
 
 // New tuning
@@ -353,7 +353,7 @@ function buildMapFromTrackCode(track) {
 
   // resize ground to fit map with padding
   if (minX < 1e8) {
-    var pad = 20;
+    var pad = 2000;
     var w = (maxX - minX) + pad;
     var h = (maxY - minY) + pad;
     w = Math.max(w, 120);
