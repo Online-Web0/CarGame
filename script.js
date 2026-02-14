@@ -2,7 +2,7 @@
 // Works with the provided index.html / style.css structure in your project.
 
 // ====== TUNING (your values kept) ======
-var SPEED = .024;
+var SPEED = .020;
 var CAMERA_LAG = 0.82;
 var COLLISION = 1.1;        // kept (used only for optional player collisions)
 var BOUNCE = 0.7;
@@ -15,7 +15,7 @@ var OOB_DIST = 200;
 var LAPS = 3;
 
 // New tuning
-var MAX_SPEED = 1.0;
+var MAX_SPEED = 0.5;
 var STEER_MIN = 0.05;
 var STEER_SPEED = 0.12;
 var CAM_HEIGHT = 4;
@@ -1068,8 +1068,8 @@ function updateMePhysics(warp) {
   var brake = down ? 0.82 : 1.0;
 
   var ACCEL = SPEED * 2.0 * throttle;
-  var FRICTION = 0.965;
-  var DRAG = 0.992;
+  var FRICTION = 0.765;
+  var DRAG = 0.792;
 
   me.data.xv += Math.sin(me.data.dir) * ACCEL * warp;
   me.data.yv += Math.cos(me.data.dir) * ACCEL * warp;
