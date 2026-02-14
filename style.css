@@ -17,6 +17,10 @@ canvas {
 #countdown {
   pointer-events: none;
 }
+#fore {
+  position: relative;
+  z-index: 10;
+}
 
 #version{
 	position: absolute;
