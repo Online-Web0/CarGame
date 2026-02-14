@@ -15,7 +15,7 @@ var OOB_DIST = 200;
 var LAPS = 3;
 
 // New tuning
-var MAX_SPEED = 5.9;
+var MAX_SPEED = 1.0;
 var STEER_MIN = 0.05;
 var STEER_SPEED = 0.12;
 var CAM_HEIGHT = 4;
@@ -1067,7 +1067,7 @@ function updateMePhysics(warp) {
   var throttle = up ? 1.0 : 0.65;
   var brake = down ? 0.82 : 1.0;
 
-  var ACCEL = SPEED * 3.5 * throttle;
+  var ACCEL = SPEED * 2.0 * throttle;
   var FRICTION = 0.965;
   var DRAG = 0.992;
 
