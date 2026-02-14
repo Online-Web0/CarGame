@@ -338,6 +338,28 @@ function ensureEngine() {
     lapEl = makeDiv("lap", "", "");
     document.body.appendChild(lapEl);
   }
+if (!document.getElementById("nitrobar")) {
+  var nb = makeDiv("nitrobar", "", "");
+  nb.style.position = "fixed";
+  nb.style.bottom = "18px";
+  nb.style.left = "50%";
+  nb.style.transform = "translateX(-50%)";
+  nb.style.width = "260px";
+  nb.style.height = "14px";
+  nb.style.background = "rgba(0,0,0,.45)";
+  nb.style.border = "2px solid white";
+  nb.style.borderRadius = "6px";
+  nb.style.zIndex = "5";
+
+  var fill = makeDiv("nitrofill", "", "");
+  fill.style.height = "100%";
+  fill.style.width = "100%";
+  fill.style.background = "#00c8ff";
+  fill.style.transition = "width .08s linear";
+
+  nb.appendChild(fill);
+  document.body.appendChild(nb);
+}
 
   // minimal label style if missing
   if (!document.getElementById("pLabelStyle")) {
@@ -1398,6 +1420,10 @@ function maybeSendToFirebase(ts) {
 
   me.data.lastSeen = Date.now();
   me.ref.set(me.data);
+}
+var fill = document.getElementById("nitrofill");
+if (fill) {
+  fill.style.width = ((nitroFuel / NITRO_MAX) * 100) + "%";
 }
 
 // ====== Main loop ======
