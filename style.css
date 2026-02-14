@@ -186,13 +186,12 @@ canvas {
 	background-color: rgba(0, 0, 0, 0.5);
 	position: absolute;
 	right: 1vmin;
-	bottom: 3vmin;
-	-webkit-transform: scaleY(0);
+	bottom: 9vmin;
 	transform: scaleY(0);
 	transition: transform .5s, -webkit-transform .5s;
-	-webkit-transform-origin: 50% 87.5%;
 	transform-origin: 50% 87.5%;
 }
+
 
 #toolbar.sel{
 	-webkit-transform: scaleY(1);
