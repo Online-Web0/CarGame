@@ -1,3 +1,7 @@
+let camX = 0;
+let camY = 0;
+let zoom = 40; // pixels per grid unit
+
 var walls = [];
 var start = [];
 var trees = [];
@@ -34,18 +38,27 @@ c.lineCap = "round";
 c.lineWidth = 2;
 function drawBG(){
 	c.clearRect(0, 0, width, height);
+
+	const spacing = zoom;
+
+	const startX = (-camX * zoom) % spacing;
+	const startY = (-camY * zoom) % spacing;
+
 	c.strokeStyle="#C0C0C0";
 	c.beginPath();
-	for(var x = offset.x - scale; x < width; x += scale){
+
+	for(let x = startX; x < width; x += spacing){
 		c.moveTo(x, 0);
 		c.lineTo(x, height);
 	}
-	for(var y = offset.y - scale; y < height; y += scale){
+	for(let y = startY; y < height; y += spacing){
 		c.moveTo(0, y);
 		c.lineTo(width, y);
 	}
+
 	c.stroke();
 }
+
 drawBG();
 
 function update(){
@@ -61,41 +74,41 @@ function update(){
 	c.lineTo(width / 2 - 5, height / 2 + 5 - scale / 2);
 	c.lineTo(width / 2 + 5, height / 2 + 5 - scale / 2);
 	c.fill();
-	c.translate(offset.x, offset.y);
+c.translate(width/2 - camX*zoom, height/2 - camY*zoom);
 	c.lineCap = "round";
 	c.lineWidth = 2;
 	c.strokeStyle="#f48342";
 	c.beginPath();
 	for(var i = 0; i < walls.length; i++){
-		c.moveTo(scale * walls[i].start.x, scale * walls[i].start.y);
-		c.lineTo(scale * walls[i].end.x, scale * walls[i].end.y);
+		c.moveTo(zoom * walls[i].start.x, zoom * walls[i].start.y);
+		c.lineTo(zoom * walls[i].end.x, zoom * walls[i].end.y);
 	}
 	c.stroke();
 	c.strokeStyle="#428ff4";
 	c.beginPath();
 	for(var i = 0; i < start.length && i < 1; i++){
-		c.moveTo(scale * start[i].start.x, scale * start[i].start.y);
-		c.lineTo(scale * start[i].end.x, scale * start[i].end.y);
+		c.moveTo(zoom * start[i].start.x, zoom * start[i].start.y);
+		c.lineTo(zoom * start[i].end.x, zoom * start[i].end.y);
 	}
 	c.stroke();
 	c.strokeStyle="#f00";
 	c.beginPath();
 	for(var i = 1; i < start.length; i++){
-		c.moveTo(scale * start[i].start.x, scale * start[i].start.y);
-		c.lineTo(scale * start[i].end.x, scale * start[i].end.y);
+		c.moveTo(zoom * start[i].start.x, zoom * start[i].start.y);
+		c.lineTo(zoom * start[i].end.x, zoom * start[i].end.y);
 	}
 	c.stroke();
 	c.fillStyle="#08cc3c";
 	for(var i = 0; i < trees.length; i++){
 		c.beginPath();
-		c.arc(scale * trees[i].x, scale * trees[i].y, 5, 0, 2 * Math.PI);
+		c.arc(zoom * trees[i].x, zoom * trees[i].y, 5, 0, 2 * Math.PI);
 		c.fill();
 	}
 	c.fillStyle="#f00";
 	c.beginPath();
 	for(var i = 0; i < arrows.length; i++){
-		c.moveTo(scale * arrows[i].x, scale * arrows[i].y);
-		c.lineTo(scale * arrows[i].x - scale * Math.cos(arrows[i].angle) / 2, scale * arrows[i].y - scale * Math.sin(arrows[i].angle) / 2);
+		c.moveTo(zoom * arrows[i].x, zoom * arrows[i].y);
+		c.lineTo(zoom * arrows[i].x - zoom * Math.cos(arrows[i].angle) / 2, zoom * arrows[i].y - zoom * Math.sin(arrows[i].angle) / 2);
 	}
 	c.stroke();
 	c.translate(-offset.x, -offset.y);
@@ -109,12 +122,13 @@ function select(n){
 }
 
 function gridX(x){
-	return Math.round((x * window.devicePixelRatio - offset.x) / scale);
+	return Math.round((x * window.devicePixelRatio - width/2) / zoom + camX);
 }
 
-function gridY(x){
-	return Math.round((x * window.devicePixelRatio - offset.y) / scale);
+function gridY(y){
+	return Math.round((y * window.devicePixelRatio - height/2) / zoom + camY);
 }
+
 
 ca.onmousedown = function(e){
 	mouse.down = true;
@@ -380,3 +394,31 @@ function dedupTrees(){
 		poss.push(trees[i]);
 	}
 }
+ca.addEventListener("wheel", e => {
+	e.preventDefault();
+	zoom *= e.deltaY > 0 ? 0.9 : 1.1;
+	zoom = Math.max(5, Math.min(120, zoom));
+});
+let draggingView = false;
+let lastX = 0;
+let lastY = 0;
+
+ca.addEventListener("mousedown", e => {
+	if (e.button === 1 || e.shiftKey) {
+		draggingView = true;
+		lastX = e.clientX;
+		lastY = e.clientY;
+	}
+});
+
+window.addEventListener("mouseup", () => draggingView = false);
+
+window.addEventListener("mousemove", e => {
+	if (!draggingView) return;
+
+	camX -= (e.clientX - lastX) / zoom;
+	camY -= (e.clientY - lastY) / zoom;
+
+	lastX = e.clientX;
+	lastY = e.clientY;
+});
