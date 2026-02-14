@@ -963,7 +963,7 @@ function joinFlow() {
   inEl.focus();
 
   var joinBtn = makeDiv("startgame", "", "JOIN");
-  joinBtn.style.bottom = "10vmin";
+  joinBtn.style.bottom = "2vmin";
   joinBtn.style.right = "calc(50vw - 40vmin)";
   joinBtn.style.width = "80vmin";
   joinBtn.style.textAlign = "center";
