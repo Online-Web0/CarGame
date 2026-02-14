@@ -1,5 +1,6 @@
-// CarGame - rebuilt script.js (single file, no dependencies beyond three.js + firebase)
-// Works with the provided index.html / style.css structure in your project.
+// CarGame - rebuilt script.js (fixed single file)
+// Dependencies: three.js required, firebase optional.
+// Works with provided index.html / style.css structure.
 
 // ====== TUNING (your values kept) ======
 var SPEED = 0.004;
@@ -58,8 +59,11 @@ var ground;
 
 // ====== Map physics data ======
 var wallSegs = [];  // {a:V2,b:V2,dir:V2,len2:number,mesh:Mesh}
-var cpSegs = [];    // [0]=start, [1]=checkpoint {a,b,dir,len2,normal:V2,mesh}
+var cpSegs = [];    // start + checkpoint segments
 var spawnX = 0, spawnY = 0, spawnDir = 0;
+
+// dynamic OOB limit (auto-expanded when map loads)
+var oobLimit = OOB_DIST;
 
 // ====== Multiplayer/game state ======
 var ROOM = null;
@@ -92,19 +96,23 @@ var color = "#ff3030";
 
 // ====== Utility ======
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-function nowMs() { return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now(); }
-
 function safeRemove(el) { if (!el) return; try { el.remove(); } catch (e) {} }
+function vec2(x, y) { return new THREE.Vector2(x, y); }
 
-function makeDiv(id, className, text) {
+function escapeHtml(s) {
+  s = String(s == null ? "" : s);
+  return s.replace(/[&<>"']/g, function (c) {
+    return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+  });
+}
+
+function makeDiv(id, className, html) {
   var d = document.createElement("div");
   if (id) d.id = id;
   if (className) d.className = className;
-  if (typeof text === "string") d.innerHTML = text;
+  if (typeof html === "string") d.innerHTML = html;
   return d;
 }
-
-function vec2(x, y) { return new THREE.Vector2(x, y); }
 
 function reflect2(v, n) {
   // v,n are Vector2, n must be unit
@@ -152,13 +160,16 @@ function setTrackCode(str) {
   el.textContent = (str || "").trim();
   buildMapFromTrackCode(getTrackCode());
 }
-
-// Expose for you to paste maps from console if you want
 window.setTrackCode = setTrackCode;
 
 // ====== Engine init ======
 function ensureEngine() {
-  if (scene && renderer && mapGroup && cpGroup) return;
+  if (scene && renderer && mapGroup && cpGroup) return true;
+
+  if (typeof THREE === "undefined") {
+    console.error("THREE is not loaded. Make sure three.js loads before script.js");
+    return false;
+  }
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x7fb0ff);
@@ -170,14 +181,12 @@ function ensureEngine() {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   // Put canvas behind UI
-renderer.domElement.style.position = "fixed";
-renderer.domElement.style.top = "0";
-renderer.domElement.style.left = "0";
-renderer.domElement.style.zIndex = "0";
-renderer.domElement.style.pointerEvents = "none"; // THIS LINE FIXES IT
-
-document.body.appendChild(renderer.domElement);
-
+  renderer.domElement.style.position = "fixed";
+  renderer.domElement.style.top = "0";
+  renderer.domElement.style.left = "0";
+  renderer.domElement.style.zIndex = "0";
+  renderer.domElement.style.pointerEvents = "none";
+  document.body.appendChild(renderer.domElement);
 
   // Groups
   mapGroup = new THREE.Group();
@@ -187,7 +196,7 @@ document.body.appendChild(renderer.domElement);
   scene.add(cpGroup);
   scene.add(decoGroup);
 
-  // Ground (resized after loading map)
+  // Ground
   var gGeo = new THREE.PlaneGeometry(300, 300);
   gGeo.rotateX(-Math.PI / 2);
   var gMat = new THREE.MeshStandardMaterial({ color: 0x4aa85e, roughness: 1 });
@@ -231,11 +240,10 @@ document.body.appendChild(renderer.domElement);
   lapEl = document.getElementById("lap");
 
   if (!countdownEl) {
-   countdownEl = makeDiv("countdown", "", "");
-countdownEl.style.pointerEvents = "none";
-countdownEl.style.display = "none";
-document.body.appendChild(countdownEl);
-
+    countdownEl = makeDiv("countdown", "", "");
+    countdownEl.style.pointerEvents = "none";
+    countdownEl.style.display = "none";
+    document.body.appendChild(countdownEl);
   }
   if (!lapEl) {
     lapEl = makeDiv("lap", "", "");
@@ -246,12 +254,14 @@ document.body.appendChild(countdownEl);
   if (!document.getElementById("pLabelStyle")) {
     var st = document.createElement("style");
     st.id = "pLabelStyle";
-    st.textContent = ".pLabel{position:fixed;transform:translate(-50%,-100%);color:#fff;font-family:'Press Start 2P',monospace;font-size:12px;pointer-events:none;text-shadow:0 2px 0 rgba(0,0,0,.55);z-index:4;white-space:nowrap;}";
+    st.textContent =
+      ".pLabel{position:fixed;transform:translate(-50%,-100%);color:#fff;font-family:'Press Start 2P',monospace;font-size:12px;pointer-events:none;text-shadow:0 2px 0 rgba(0,0,0,.55);z-index:4;white-space:nowrap;}";
     document.head.appendChild(st);
   }
 
   window.addEventListener("resize", onResize, false);
   window.addEventListener("orientationchange", onResize, false);
+  return true;
 }
 
 function onResize() {
@@ -268,7 +278,7 @@ function clearGroup(g) {
 }
 
 function buildMapFromTrackCode(track) {
-  ensureEngine();
+  if (!ensureEngine()) return;
 
   clearGroup(mapGroup);
   clearGroup(cpGroup);
@@ -279,11 +289,11 @@ function buildMapFromTrackCode(track) {
   track = (track || "").trim();
   if (!track) {
     spawnX = 0; spawnY = 0; spawnDir = 0;
+    oobLimit = OOB_DIST;
     return;
   }
 
   var parts = track.split("|");
-  // parts[0]=walls, parts[1]=checkpoint (2 segments), parts[2]=trees, parts[3]=arrows
   var wallsPart = (parts[0] || "").trim();
   var checkPart = (parts[1] || "").trim();
   var treesPart = (parts[2] || "").trim();
@@ -297,7 +307,7 @@ function buildMapFromTrackCode(track) {
     maxY = Math.max(maxY, p.y);
   }
 
-  // Walls: tokens are segments "x1,y1/x2,y2"
+  // Walls
   var wallTokens = wallsPart.split(/\s+/).filter(Boolean);
   for (var i = 0; i < wallTokens.length; i++) {
     var seg = parseSeg(wallTokens[i]);
@@ -306,7 +316,7 @@ function buildMapFromTrackCode(track) {
     addWall(seg.a, seg.b);
   }
 
-  // Checkpoints: typically two segments
+  // Checkpoints
   var cpTokens = checkPart.split(/\s+/).filter(Boolean);
   for (var j = 0; j < cpTokens.length; j++) {
     var cseg = parseSeg(cpTokens[j]);
@@ -315,7 +325,7 @@ function buildMapFromTrackCode(track) {
     addCheckpoint(cseg.a, cseg.b, j === 0);
   }
 
-  // Trees (optional): tokens are points "x,y"
+  // Trees
   var treeTokens = treesPart.split(/\s+/).filter(Boolean);
   for (var t = 0; t < treeTokens.length; t++) {
     var tp = parseV2(treeTokens[t]);
@@ -324,7 +334,7 @@ function buildMapFromTrackCode(track) {
     addTree(tp.x, tp.y);
   }
 
-  // resize ground to fit map with padding
+  // resize ground + update OOB limit based on map size
   if (minX < 1e8) {
     var pad = 20;
     var w = (maxX - minX) + pad;
@@ -332,16 +342,18 @@ function buildMapFromTrackCode(track) {
     w = Math.max(w, 120);
     h = Math.max(h, 120);
 
-    ground.geometry.dispose();
+    if (ground && ground.geometry) ground.geometry.dispose();
     var gGeo = new THREE.PlaneGeometry(w, h);
     gGeo.rotateX(-Math.PI / 2);
     ground.geometry = gGeo;
     ground.position.set((minX + maxX) / 2, 0, (minY + maxY) / 2);
+
+    oobLimit = Math.max(OOB_DIST, Math.max(w, h) * 0.85 + 60);
   } else {
     ground.position.set(0, 0, 0);
+    oobLimit = OOB_DIST;
   }
 
-  // Spawn from start+checkpoint relationship
   computeSpawn();
 }
 
@@ -354,14 +366,12 @@ function addWall(a2, b2) {
   var mid = a.clone().add(b).multiplyScalar(0.5);
   var width = Math.sqrt(len2);
 
-  // Visual mesh (thin wall)
   var geo = new THREE.BoxGeometry(width, 3, 0.6);
   var mat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.95 });
   var mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
 
-  // rotate so its long axis aligns with segment
   var ang = Math.atan2((b.y - a.y), (b.x - a.x));
   mesh.rotation.y = -ang;
   mesh.position.set(mid.x, 1.5, mid.y);
@@ -395,17 +405,16 @@ function addCheckpoint(a2, b2, isStart) {
   var mat = new THREE.MeshStandardMaterial({ color: isStart ? 0xffffff : 0xffe100, roughness: 0.8 });
   var mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
+
   var ang = Math.atan2((b.y - a.y), (b.x - a.x));
   mesh.rotation.y = -ang;
   mesh.position.set(mid.x, 0.05, mid.y);
 
   cpGroup.add(mesh);
-
   cpSegs.push({ a: a, b: b, dir: ab, len2: len2, normal: n, mid: mid, mesh: mesh });
 }
 
 function addTree(x, y) {
-  // small low-cost decoration
   var trunk = new THREE.Mesh(
     new THREE.CylinderGeometry(0.2, 0.25, 1.2, 8),
     new THREE.MeshStandardMaterial({ color: 0x5a3b1e, roughness: 1 })
@@ -426,7 +435,6 @@ function addTree(x, y) {
 }
 
 function computeSpawn() {
-  // Need at least start segment
   if (!cpSegs.length) {
     spawnX = 0; spawnY = 0; spawnDir = 0;
     return;
@@ -434,23 +442,23 @@ function computeSpawn() {
   var start = cpSegs[0];
   var forward = start.normal.clone();
 
-  // If there is a checkpoint segment, choose the normal direction that points toward it.
   if (cpSegs.length > 1) {
     var chk = cpSegs[1];
-    var v = chk.mid.clone().sub(start.mid); // Vector2
+    var v = chk.mid.clone().sub(start.mid);
     if (v.dot(forward) < 0) forward.multiplyScalar(-1);
   }
 
   spawnX = start.mid.x + forward.x * 3;
   spawnY = start.mid.y + forward.y * 3;
 
-  // For your physics convention: xv += sin(dir), yv += cos(dir)
+  // physics convention: xv += sin(dir), yv += cos(dir)
   spawnDir = Math.atan2(forward.x, forward.y);
 }
 
 // ====== Cars + labels ======
 function makeCar(hexColor) {
   var car = new THREE.Object3D();
+  car.userData = car.userData || {};
 
   var bodyGeo = new THREE.BoxGeometry(1.6, 0.6, 2.6);
   var bodyMat = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.7, metalness: 0.05 });
@@ -478,7 +486,6 @@ function makeCar(hexColor) {
     return w;
   }
 
-  // IMPORTANT: front wheels are children[0] and children[1]
   var frontLeft = wheelMesh();
   frontLeft.position.set(-0.75, 0.35, 0.85);
   car.add(frontLeft);
@@ -495,6 +502,10 @@ function makeCar(hexColor) {
   backRight.position.set(0.75, 0.35, -0.85);
   car.add(backRight);
 
+  // store wheel refs (fixes the old "children[0]" bug)
+  car.userData.frontLeft = frontLeft;
+  car.userData.frontRight = frontRight;
+
   return car;
 }
 
@@ -507,7 +518,6 @@ function makeLabel(name) {
 }
 
 function projectToScreen(pos3) {
-  // returns {x,y,visible}
   var v = pos3.clone();
   v.y += 0.8;
   v.project(camera);
@@ -538,7 +548,6 @@ function setupInputOnce() {
     if (k === "ArrowDown" || k === "s" || k === "S") down = false;
   });
 
-  // touch: left/right half steer, top half throttle
   function updateTouch(touches) {
     left = right = up = down = false;
     if (!touches || touches.length === 0) return;
@@ -555,7 +564,7 @@ function setupInputOnce() {
   window.addEventListener("touchend", function () { left = right = up = down = false; }, { passive: true });
 }
 
-// ====== Color picker (fixes slider visual movement) ======
+// ====== Color picker ======
 function hsvToHex(h, s, v) {
   var c = v * s;
   var x = c * (1 - Math.abs(((h / 60) % 2) - 1));
@@ -595,7 +604,6 @@ function setupColorPickerOnce() {
   setupColorPickerOnce._did = true;
   if (!pickerEl || !sliderEl) return;
 
-  // initial
   requestAnimationFrame(function(){ setSliderFrom01(0.02); });
 
   var dragging = false;
@@ -618,7 +626,6 @@ function setupColorPickerOnce() {
 
 // ====== Menu + flow ======
 function animateMenuIn() {
-  // style.css starts everything off-screen; this brings it in.
   if (titleEl) setTimeout(function(){ titleEl.style.transform = "translate3d(0, 0, 0)"; }, 10);
   var items = document.getElementsByClassName("menuitem");
   for (var i = 0; i < items.length; i++) {
@@ -635,12 +642,9 @@ function clearModeUI() {
   safeRemove(overlayMsgEl);
   overlayMsgEl = null;
 
-  var old = document.getElementById("startgame");
-  safeRemove(old);
-  var oldCode = document.getElementById("code");
-  safeRemove(oldCode);
-  var oldIn = document.getElementById("incode");
-  safeRemove(oldIn);
+  safeRemove(document.getElementById("startgame"));
+  safeRemove(document.getElementById("code"));
+  safeRemove(document.getElementById("incode"));
 }
 
 function showOverlayMsg(html) {
@@ -653,21 +657,18 @@ function showOverlayMsg(html) {
     overlayMsgEl.style.zIndex = "100000";
     foreEl.appendChild(overlayMsgEl);
   }
-  overlayMsgEl.innerHTML = html;
+  overlayMsgEl.innerHTML = html || "";
 }
 
 function showModeMenu() {
-  ensureEngine();
+  if (!ensureEngine()) return;
   setupInputOnce();
   setupColorPickerOnce();
 
   clearModeUI();
 
-  // Validate name
   var nm = (nameEl && nameEl.value ? nameEl.value : "").trim();
-  if (!nm) {
-    if (nameEl) nameEl.value = "Player";
-  }
+  if (!nm && nameEl) nameEl.value = "Player";
 
   if (titleEl) titleEl.innerHTML = "Choose Mode";
   if (startEl) startEl.style.display = "none";
@@ -681,7 +682,6 @@ function showModeMenu() {
     b.style.top = "calc(" + topVh + "vh - 8vmin)";
     b.onclick = onClick;
     modeWrapEl.appendChild(b);
-    // bring in from left
     setTimeout(function(){ b.style.transform = "translate3d(0,0,0)"; }, 20);
     return b;
   }
@@ -692,21 +692,14 @@ function showModeMenu() {
 }
 
 function hideMainMenu() {
-  // hide name + picker + start buttons
   if (!foreEl) return;
 
-  // Keep settings/toolbar visible; hide menu text + inputs
-  var ids = ["title", "name", "colorpicker", "start", "divider", "mywebsitelink"]; // safe
+  var ids = ["title", "name", "colorpicker", "start", "divider", "mywebsitelink"];
   for (var i = 0; i < ids.length; i++) {
     var el = document.getElementById(ids[i]);
     if (el) el.style.display = "none";
   }
-
   clearModeUI();
-
-  // Allow gameplay input
-  // foreEl.style.pointerEvents = "none";
-
 }
 
 // ====== Toolbar tools ======
@@ -721,7 +714,6 @@ function setupToolbarOnce() {
     else toolbarEl.classList.add("sel");
   };
 
-  // Clear and rebuild tools
   toolbarEl.innerHTML = "";
 
   function toolButton(title, bg, onClick) {
@@ -734,12 +726,10 @@ function setupToolbarOnce() {
     return t;
   }
 
-  // Open editor
   toolButton("Open editor", "#55db8f", function(){
     window.open("./editor/", "_blank");
   });
 
-  // Import map
   toolButton("Import map code", "#db6262", function(){
     var cur = getTrackCode();
     var str = prompt("Paste trackcode here (exported from /editor).", cur);
@@ -750,7 +740,6 @@ function setupToolbarOnce() {
     }
   });
 
-  // Export map
   toolButton("Export map code", "#9a55db", function(){
     var str = getTrackCode();
     if (!str) return;
@@ -786,7 +775,7 @@ function clearPlayers() {
   for (var k in players) {
     if (!players.hasOwnProperty(k)) continue;
     var p = players[k];
-    if (p && p.model) scene.remove(p.model);
+    if (p && p.model && scene) scene.remove(p.model);
     if (p && p.label) safeRemove(p.label);
   }
   players = {};
@@ -795,9 +784,8 @@ function clearPlayers() {
 }
 
 function connectToRoom(code, hostFlag) {
-  ensureEngine();
+  if (!ensureEngine()) return;
 
-  // reset any previous
   detachRoomListeners();
   clearPlayers();
 
@@ -815,10 +803,8 @@ function connectToRoom(code, hostFlag) {
   playersRef = roomRef.child("players");
   startRef = roomRef.child("startedAt");
 
-  // create my player entry immediately so others see me in lobby
   createLocalPlayerFirebase();
 
-  // listeners
   playersRef.on("child_added", function (snap) {
     var key = snap.key;
     var data = snap.val();
@@ -845,8 +831,6 @@ function connectToRoom(code, hostFlag) {
       }
       return;
     }
-
-    // Start signal received
     startGame();
   });
 }
@@ -882,7 +866,6 @@ function createLocalPlayerFirebase() {
   me = { key: meKey, ref: ref, data: data, model: model, label: label, isMe: true, lastSend: 0 };
   players[meKey] = me;
 
-  // cleanup
   ref.onDisconnect().remove();
   ref.set(data);
 }
@@ -891,7 +874,6 @@ function upsertPlayer(key, data) {
   if (!data) return;
 
   if (meKey && key === meKey && me) {
-    // keep name/color synced, but don't overwrite live physics fields
     me.data.name = data.name || me.data.name;
     me.data.color = data.color || me.data.color;
     if (me.label) me.label.textContent = me.data.name;
@@ -907,7 +889,6 @@ function upsertPlayer(key, data) {
     scene.add(model);
 
     var label = makeLabel(data.name || "Player");
-
     p = { key: key, ref: playersRef.child(key), data: data, model: model, label: label, isMe: false };
     players[key] = p;
   } else {
@@ -919,7 +900,7 @@ function upsertPlayer(key, data) {
 function removePlayer(key) {
   var p = players[key];
   if (!p) return;
-  if (p.model) scene.remove(p.model);
+  if (p.model && scene) scene.remove(p.model);
   if (p.label) safeRemove(p.label);
   delete players[key];
 }
@@ -929,7 +910,6 @@ function hostFlow() {
   clearModeUI();
   var code = randomCode(4);
 
-  // show code + startgame button
   var codeEl = makeDiv("code", "info", code);
   codeEl.style.fontSize = "20vmin";
   codeEl.style.textAlign = "center";
@@ -943,7 +923,7 @@ function hostFlow() {
   if (foreEl) foreEl.appendChild(sg);
 
   sg.onclick = function(){
-    if (!roomRef) return;
+    if (!roomRef || typeof firebase === "undefined") return;
     roomRef.child("startedAt").set(firebase.database.ServerValue.TIMESTAMP);
   };
 
@@ -960,7 +940,6 @@ function joinFlow() {
   inEl.autocomplete = "off";
   inEl.spellcheck = false;
   inEl.value = "";
-
   if (foreEl) foreEl.appendChild(inEl);
   inEl.focus();
 
@@ -983,13 +962,13 @@ function joinFlow() {
 }
 
 function soloFlow() {
-  ensureEngine();
+  if (!ensureEngine()) return;
+
   clearPlayers();
   detachRoomListeners();
   ROOM = null;
   isHost = false;
 
-  // local-only player
   var nm = (nameEl && nameEl.value ? nameEl.value : "Player").trim() || "Player";
   meKey = "solo";
 
@@ -1027,20 +1006,10 @@ function startGame() {
   hideMainMenu();
   showOverlayMsg("");
 
-  startCountdown(function(){
-    // countdown done
-  });
+  startCountdown(function(){});
 }
 
-function startCountdown(done) {
-  gameSortaStarted = true;
-  var t = 3;
-  if (countdownEl) {
-    countdownEl.style.fontSize = "40vmin";
-   countdownEl.style.display = "block";
-countdownEl.innerHTML = String(t);
-
-  }
+// ====== FIXED countdown (single definition, no nested duplicate, no stray commas) ======
 function startCountdown(done) {
   gameSortaStarted = true;
   var t = 3;
@@ -1068,14 +1037,8 @@ function startCountdown(done) {
     }
 
     if (countdownEl) {
-      countdownEl.style.display = "block";
       countdownEl.innerHTML = String(t);
     }
-
-  }, 1000);
-}
-
-
   }, 1000);
 }
 
@@ -1083,19 +1046,15 @@ function startCountdown(done) {
 function updateMePhysics(warp) {
   if (!me || !me.data || !me.model) return;
 
-  // steering input
-  if (!mobile) {
-    if (left) me.data.steer = Math.PI / 6;
-    if (right) me.data.steer = -Math.PI / 6;
-    if (!(left ^ right)) me.data.steer = 0;
-  }
+  // steering input (works for BOTH desktop + mobile now)
+  if (left) me.data.steer = Math.PI / 6;
+  if (right) me.data.steer = -Math.PI / 6;
+  if (!(left ^ right)) me.data.steer = 0;
   me.data.steer = clamp(me.data.steer, -Math.PI/6, Math.PI/6);
 
-  // Speed-aware steering
   var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
 
-  // Throttle/brake (small improvement)
   var throttle = up ? 1.0 : 0.65;
   var brake = down ? 0.82 : 1.0;
 
@@ -1112,7 +1071,6 @@ function updateMePhysics(warp) {
   me.data.xv *= DRAG * brake;
   me.data.yv *= DRAG * brake;
 
-  // top-speed cap
   var velMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   if (velMag > MAX_SPEED) {
     var s = MAX_SPEED / velMag;
@@ -1120,18 +1078,14 @@ function updateMePhysics(warp) {
     me.data.yv *= s;
   }
 
-  // integrate
   me.data.x += me.data.xv * warp;
   me.data.y += me.data.yv * warp;
 
-  // wall collisions (2D capsule against segments)
   collideMeWithWalls();
-
-  // checkpoint logic
   handleCheckpoints();
 
-  // OOB reset
-  if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
+  // OOB reset (dynamic oobLimit)
+  if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > oobLimit) {
     me.data.x = spawnX;
     me.data.y = spawnY;
     me.data.xv = 0;
@@ -1139,14 +1093,15 @@ function updateMePhysics(warp) {
     me.data.dir = spawnDir;
   }
 
-  // model
   me.model.position.x = me.data.x;
   me.model.position.z = me.data.y;
   me.model.rotation.y = me.data.dir;
 
-  // wheel visuals
-  if (me.model.children[0]) me.model.children[0].rotation.z = Math.PI/2 - me.data.steer;
-  if (me.model.children[1]) me.model.children[1].rotation.z = Math.PI/2 - me.data.steer;
+  // wheel visuals (fixed to use stored wheel refs)
+  var fl = me.model.userData && me.model.userData.frontLeft;
+  var fr = me.model.userData && me.model.userData.frontRight;
+  if (fl) fl.rotation.z = Math.PI/2 - me.data.steer;
+  if (fr) fr.rotation.z = Math.PI/2 - me.data.steer;
 }
 
 function collideMeWithWalls() {
@@ -1160,10 +1115,8 @@ function collideMeWithWalls() {
     var dist = delta.length();
     if (dist < WALL_SIZE) {
       var n = (dist > 1e-6) ? delta.multiplyScalar(1 / dist) : vec2(0, 1);
-      // only reflect if moving into the wall
       if (v.dot(n) < 0) {
         v = reflect2(v, n);
-        // small correction push
         v.add(n.clone().multiplyScalar(BOUNCE_CORRECT));
         v.multiplyScalar(BOUNCE);
       }
@@ -1181,11 +1134,9 @@ function handleCheckpoints() {
   if (cpSegs.length < 2) return;
   var pos = vec2(me.data.x, me.data.y);
 
-  // For each cp segment: check if within width and near the line
   for (var i = 0; i < cpSegs.length; i++) {
     var cp = cpSegs[i];
 
-    // projection along segment
     var ab = cp.b.clone().sub(cp.a);
     var t = 0;
     if (cp.len2 > 1e-9) t = clamp(pos.clone().sub(cp.a).dot(ab) / cp.len2, 0, 1);
@@ -1194,22 +1145,19 @@ function handleCheckpoints() {
     var dist = pos.distanceTo(closest);
     if (dist > 1.1) continue;
 
-    // crossed if close to line and inside segment
     if (i === 0) {
-      // start line
       if (me.data.checkpoint === 1) {
         me.data.checkpoint = 0;
         me.data.lap++;
       }
     } else {
-      // checkpoint line(s)
       me.data.checkpoint = 1;
     }
   }
 
   if (me.data.lap > LAPS && countdownEl && countdownEl.innerHTML === "") {
     countdownEl.style.fontSize = "14vmin";
-    countdownEl.innerHTML = (me.data.name || "Player").replaceAll("<", "&lt;") + " Won!";
+    countdownEl.innerHTML = escapeHtml(me.data.name || "Player") + " Won!";
   }
 }
 
@@ -1238,7 +1186,6 @@ function updateRemoteVisuals(warp) {
     var p = players[k];
     if (!p || p.isMe || !p.model || !p.data) continue;
 
-    // Smoothly follow their network position
     var tx = p.data.x || 0;
     var ty = p.data.y || 0;
     var tdir = p.data.dir || 0;
@@ -1246,7 +1193,6 @@ function updateRemoteVisuals(warp) {
     p.model.position.x += (tx - p.model.position.x) * clamp(0.18 * warp, 0, 1);
     p.model.position.z += (ty - p.model.position.z) * clamp(0.18 * warp, 0, 1);
 
-    // simple angle lerp
     var cur = p.model.rotation.y;
     var diff = ((tdir - cur + Math.PI) % (2*Math.PI)) - Math.PI;
     p.model.rotation.y = cur + diff * clamp(0.25 * warp, 0, 1);
@@ -1274,12 +1220,12 @@ function updateHud() {
   if (!lapEl || !me || !me.data) return;
   var spd = Math.sqrt(me.data.xv*me.data.xv + me.data.yv*me.data.yv);
   var roomText = ROOM ? (" | " + ROOM) : "";
-  lapEl.innerHTML = "Lap " + (me.data.lap <= LAPS ? (me.data.lap + "/" + LAPS) : "") + "<br>Speed " + spd.toFixed(2) + roomText;
+  var lapText = (me.data.lap <= LAPS) ? (me.data.lap + "/" + LAPS) : "";
+  lapEl.innerHTML = "Lap " + lapText + "<br>Speed " + spd.toFixed(2) + roomText;
 }
 
 function maybeSendToFirebase(ts) {
   if (!me || !me.ref) return;
-  // throttle writes
   if (ts - me.lastSend < 60) return;
   me.lastSend = ts;
 
@@ -1296,7 +1242,6 @@ function renderLoop(ts) {
   var timepassed = ts - lastTime;
   lastTime = ts;
 
-  // cap large deltas (tab switch)
   timepassed = Math.min(timepassed, 50);
   var warp = timepassed / 16;
 
@@ -1306,8 +1251,7 @@ function renderLoop(ts) {
     updateCamera(warp);
     updateHud();
     maybeSendToFirebase(ts);
-  } else {
-    // idle orbit preview
+  } else if (camera) {
     var a = ts * 0.0004;
     camera.position.set(50 * Math.sin(a), 20, 50 * Math.cos(a));
     camera.lookAt(new THREE.Vector3(0,0,0));
@@ -1316,31 +1260,25 @@ function renderLoop(ts) {
 
   updateLabels();
 
-  renderer.render(scene, camera);
+  if (renderer && scene && camera) renderer.render(scene, camera);
   MODS();
 }
 
 // ====== Init ======
 function init() {
+  if (!ensureEngine()) return;
 
+  if (foreEl) foreEl.style.pointerEvents = "auto";
 
-
-  ensureEngine();
- if (foreEl) foreEl.style.pointerEvents = "auto";
-  
   setupToolbarOnce();
   setupInputOnce();
   setupColorPickerOnce();
 
-  // build map now (so you don't get a blank world)
   buildMapFromTrackCode(getTrackCode());
 
-  // Start button
   if (startEl) startEl.onclick = showModeMenu;
 
   animateMenuIn();
-
-  // Begin render loop
   requestAnimationFrame(renderLoop);
 }
 
@@ -1351,15 +1289,12 @@ if (document.readyState === "loading") {
   init();
 }
 
-// ====== Compatibility with your existing HTML inline onclick handlers ======
-// index.html uses onclick="menu2()" for Start.
-// Some older copies also try to call join() after loading.
+// ====== Compatibility with existing HTML inline onclick handlers ======
 window.menu2 = showModeMenu;
 window.host = hostFlow;
 window.joinGame = joinFlow;
 window.codeCheck = function () {};
 window.updateColor = function (x01) { setSliderFrom01(x01); };
-
 
 // Clean up firebase presence on close
 window.addEventListener("beforeunload", function(){
