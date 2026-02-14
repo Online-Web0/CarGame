@@ -74,6 +74,37 @@ var me = null;
 
 var gameStarted = false;      // true after room start signal (or solo start)
 var gameSortaStarted = false; // countdown freeze
+var playerCollisionEnabled = false;
+
+function collideWithPlayers() {
+  if (!playerCollisionEnabled || !me) return;
+
+  var myPos = vec2(me.data.x, me.data.y);
+
+  for (var k in players) {
+    if (!players.hasOwnProperty(k)) continue;
+    if (k === meKey) continue;
+
+    var p = players[k];
+    if (!p || !p.data) continue;
+
+    var otherPos = vec2(p.data.x, p.data.y);
+    var delta = myPos.clone().sub(otherPos);
+    var dist = delta.length();
+
+    var radius = 1.2; // car size
+
+    if (dist < radius * 2 && dist > 0.001) {
+      delta.normalize();
+
+      me.data.x += delta.x * 0.2;
+      me.data.y += delta.y * 0.2;
+
+      me.data.xv *= 0.7;
+      me.data.yv *= 0.7;
+    }
+  }
+}
 
 // ====== Input state ======
 var left = false;
@@ -1039,9 +1070,11 @@ function startGame() {
   if (gameStarted) return;
 
   gameStarted = true;
+  playerCollisionEnabled = false;   // reset each round
+
+  gameStarted = true;
 
   if (foreEl) foreEl.style.display = "none";
-
   hideAllMenusForGameplay();
 
   safeRemove(document.getElementById("incode"));
@@ -1050,7 +1083,12 @@ function startGame() {
   showOverlayMsg("");
 
   startCountdown(function () {});
+
+  setTimeout(function () {
+    playerCollisionEnabled = true;
+  }, 5000);
 }
+
 
 
 function startCountdown(done) {
@@ -1096,6 +1134,9 @@ function updateMePhysics(warp) {
     if (!(left ^ right)) me.data.steer = 0;
   }
   me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
+collideMeWithWalls();
+collideWithPlayers();
+handleCheckpoints();
 
   var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
