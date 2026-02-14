@@ -1432,6 +1432,7 @@ function updateNitroUI() {
 }
 
 var lastTime = 0;
+
 function renderLoop(ts) {
   requestAnimationFrame(renderLoop);
   if (!lastTime) lastTime = ts;
@@ -1444,9 +1445,11 @@ function renderLoop(ts) {
 
   if (gameStarted && me) {
     if (!gameSortaStarted) updateMePhysics(warp);
+
     updateRemoteVisuals(warp);
     updateCamera(warp);
     updateHud();
+    updateNitroUI();
     maybeSendToFirebase(ts);
   } else {
     var a = ts * 0.0004;
@@ -1454,19 +1457,12 @@ function renderLoop(ts) {
     camera.lookAt(new THREE.Vector3(0, 0, 0));
     updateRemoteVisuals(warp);
   }
-if (gameStarted && me) {
-  if (!gameSortaStarted) updateMePhysics(warp);
-  updateRemoteVisuals(warp);
-  updateCamera(warp);
-  updateHud();
-  updateNitroUI();      // <-- add this
-  maybeSendToFirebase(ts);
-}
 
   updateLabels();
-
   renderer.render(scene, camera);
   MODS();
+}
+
 }
 
 // ====== Init ======
