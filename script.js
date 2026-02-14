@@ -1273,9 +1273,8 @@ me.data.dir = spawnDir;
   me.model.position.z = me.data.y;
   me.model.rotation.y = me.data.dir;
 
-  if (me.model.children[2]) me.model.children[2].rotation.y = -me.data.steer;
-if (me.model.children[3]) me.model.children[3].rotation.y = -me.data.steer;
-
+  if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
+  if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
 }
 
 function collideMeWithWalls() {
@@ -1432,7 +1431,6 @@ function updateNitroUI() {
 }
 
 var lastTime = 0;
-
 function renderLoop(ts) {
   requestAnimationFrame(renderLoop);
   if (!lastTime) lastTime = ts;
@@ -1445,11 +1443,9 @@ function renderLoop(ts) {
 
   if (gameStarted && me) {
     if (!gameSortaStarted) updateMePhysics(warp);
-
     updateRemoteVisuals(warp);
     updateCamera(warp);
     updateHud();
-    updateNitroUI();
     maybeSendToFirebase(ts);
   } else {
     var a = ts * 0.0004;
@@ -1457,12 +1453,19 @@ function renderLoop(ts) {
     camera.lookAt(new THREE.Vector3(0, 0, 0));
     updateRemoteVisuals(warp);
   }
-
-  updateLabels();
-  renderer.render(scene, camera);
-  MODS();
+if (gameStarted && me) {
+  if (!gameSortaStarted) updateMePhysics(warp);
+  updateRemoteVisuals(warp);
+  updateCamera(warp);
+  updateHud();
+  updateNitroUI();      // <-- add this
+  maybeSendToFirebase(ts);
 }
 
+  updateLabels();
+
+  renderer.render(scene, camera);
+  MODS();
 }
 
 // ====== Init ======
