@@ -975,12 +975,17 @@ function joinFlow() {
   if (foreEl) foreEl.appendChild(inEl);
   inEl.focus();
 
-  var joinBtn = makeDiv("startgame", "", "JOIN");
-  joinBtn.style.bottom = "2vmin";
-  joinBtn.style.right = "calc(50vw - 40vmin)";
-  joinBtn.style.width = "80vmin";
-  joinBtn.style.textAlign = "center";
-  if (foreEl) foreEl.appendChild(joinBtn);
+var joinBtn = makeDiv("startgame", "", "JOIN");
+
+joinBtn.style.position = "fixed";   // same fix as START button
+joinBtn.style.bottom = "20px";
+joinBtn.style.left = "50%";
+joinBtn.style.transform = "translateX(-50%)";
+joinBtn.style.width = "420px";
+joinBtn.style.textAlign = "center";
+joinBtn.style.zIndex = "99999";
+
+document.body.appendChild(joinBtn);
 
   function doJoin() {
     var code = (inEl.value || "").trim().toUpperCase();
