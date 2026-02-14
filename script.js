@@ -15,7 +15,7 @@ var OOB_DIST = 2000;
 var LAPS = 3;
 
 // New tuning
-var MAX_SPEED = 0.5;
+var MAX_SPEED = 0.36;
 var STEER_MIN = 0.05;
 var STEER_SPEED = 0.12;
 var CAM_HEIGHT = 4;
