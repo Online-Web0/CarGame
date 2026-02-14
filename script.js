@@ -1154,9 +1154,7 @@ function updateMePhysics(warp) {
     if (!(left ^ right)) me.data.steer = 0;
   }
   me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
-collideMeWithWalls();
-collideWithPlayers();
-handleCheckpoints();
+
 
 
   var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
