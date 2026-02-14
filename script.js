@@ -939,12 +939,15 @@ function hostFlow() {
 
 var sg = makeDiv("startgame", "", "START GAME");
 
-sg.style.bottom = "2vmin";   // lower button
-sg.style.right = "calc(50vw - 40vmin)";
+sg.style.position = "absolute";   // REQUIRED
+sg.style.bottom = "2vmin";
+sg.style.left = "50%";
+sg.style.transform = "translateX(-50%)";
 sg.style.width = "80vmin";
 sg.style.textAlign = "center";
 
 if (foreEl) foreEl.appendChild(sg);
+
 
 
   sg.onclick = function () {
