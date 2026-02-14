@@ -92,7 +92,6 @@ var color = "#ff3030";
 
 // ====== Utility ======
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-
 function safeRemove(el) { if (!el) return; try { el.remove(); } catch (e) {} }
 
 function makeDiv(id, className, text) {
@@ -152,8 +151,39 @@ function setTrackCode(str) {
   buildMapFromTrackCode(getTrackCode());
 }
 
-// Expose for console usage
+// Expose for console
 window.setTrackCode = setTrackCode;
+
+// ====== UI visibility helpers (ONLY UI FIX CHANGES) ======
+function setDisplay(id, val) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = val;
+}
+
+function hideLobbyUI() {
+  // Hide the start screen controls (name + color slider + start button) once you click START
+  setDisplay("name", "none");
+  setDisplay("colorpicker", "none"); // includes slider
+  setDisplay("start", "none");
+  setDisplay("divider", "none");
+  setDisplay("mywebsitelink", "none");
+}
+
+function showLobbyUI() {
+  // Not used in normal flow, but safe to keep
+  setDisplay("name", "");
+  setDisplay("colorpicker", "");
+  setDisplay("start", "");
+  setDisplay("divider", "");
+  setDisplay("mywebsitelink", "");
+}
+
+function hideAllMenusForGameplay() {
+  // When the race actually starts, remove ALL menu UI layers except settings/toolbar + HUD
+  clearModeUI();
+  setDisplay("title", "none");
+  hideLobbyUI();
+}
 
 // ====== Engine init ======
 function ensureEngine() {
@@ -168,7 +198,7 @@ function ensureEngine() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  // Put canvas behind UI (and do NOT block clicks)
+  // Put canvas behind UI
   renderer.domElement.style.position = "fixed";
   renderer.domElement.style.top = "0";
   renderer.domElement.style.left = "0";
@@ -184,7 +214,7 @@ function ensureEngine() {
   scene.add(cpGroup);
   scene.add(decoGroup);
 
-  // Ground
+  // Ground (resized after loading map)
   var gGeo = new THREE.PlaneGeometry(300, 300);
   gGeo.rotateX(-Math.PI / 2);
   var gMat = new THREE.MeshStandardMaterial({ color: 0x4aa85e, roughness: 1 });
@@ -224,22 +254,6 @@ function ensureEngine() {
   settingsEl = document.getElementById("settings");
   toolbarEl = document.getElementById("toolbar");
 
-  // Pin gear + toolbar so they're always accessible
-  if (settingsEl) {
-    settingsEl.style.position = "fixed";
-    settingsEl.style.top = "10px";
-    settingsEl.style.right = "10px";
-    settingsEl.style.zIndex = "20";
-  }
-  if (toolbarEl) {
-    toolbarEl.style.position = "fixed";
-    toolbarEl.style.top = "60px";
-    toolbarEl.style.right = "10px";
-    toolbarEl.style.zIndex = "20";
-    toolbarEl.style.maxHeight = "70vh";
-    toolbarEl.style.overflowY = "auto";
-  }
-
   countdownEl = document.getElementById("countdown");
   lapEl = document.getElementById("lap");
 
@@ -248,10 +262,7 @@ function ensureEngine() {
     countdownEl.style.pointerEvents = "none";
     countdownEl.style.display = "none";
     document.body.appendChild(countdownEl);
-  } else {
-    countdownEl.style.pointerEvents = "none";
   }
-
   if (!lapEl) {
     lapEl = makeDiv("lap", "", "");
     document.body.appendChild(lapEl);
@@ -303,6 +314,7 @@ function buildMapFromTrackCode(track) {
   var checkPart = (parts[1] || "").trim();
   var treesPart = (parts[2] || "").trim();
 
+  // collect bounds
   var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
   function includePt(p) {
     minX = Math.min(minX, p.x);
@@ -311,6 +323,7 @@ function buildMapFromTrackCode(track) {
     maxY = Math.max(maxY, p.y);
   }
 
+  // Walls
   var wallTokens = wallsPart.split(/\s+/).filter(Boolean);
   for (var i = 0; i < wallTokens.length; i++) {
     var seg = parseSeg(wallTokens[i]);
@@ -319,6 +332,7 @@ function buildMapFromTrackCode(track) {
     addWall(seg.a, seg.b);
   }
 
+  // Checkpoints
   var cpTokens = checkPart.split(/\s+/).filter(Boolean);
   for (var j = 0; j < cpTokens.length; j++) {
     var cseg = parseSeg(cpTokens[j]);
@@ -327,6 +341,7 @@ function buildMapFromTrackCode(track) {
     addCheckpoint(cseg.a, cseg.b, j === 0);
   }
 
+  // Trees
   var treeTokens = treesPart.split(/\s+/).filter(Boolean);
   for (var t = 0; t < treeTokens.length; t++) {
     var tp = parseV2(treeTokens[t]);
@@ -335,6 +350,7 @@ function buildMapFromTrackCode(track) {
     addTree(tp.x, tp.y);
   }
 
+  // resize ground to fit map with padding
   if (minX < 1e8) {
     var pad = 20;
     var w = (maxX - minX) + pad;
@@ -343,9 +359,9 @@ function buildMapFromTrackCode(track) {
     h = Math.max(h, 120);
 
     ground.geometry.dispose();
-    var gg = new THREE.PlaneGeometry(w, h);
-    gg.rotateX(-Math.PI / 2);
-    ground.geometry = gg;
+    var gGeo = new THREE.PlaneGeometry(w, h);
+    gGeo.rotateX(-Math.PI / 2);
+    ground.geometry = gGeo;
     ground.position.set((minX + maxX) / 2, 0, (minY + maxY) / 2);
   } else {
     ground.position.set(0, 0, 0);
@@ -401,6 +417,7 @@ function addCheckpoint(a2, b2, isStart) {
   var mat = new THREE.MeshStandardMaterial({ color: isStart ? 0xffffff : 0xffe100, roughness: 0.8 });
   var mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
+
   var ang = Math.atan2((b.y - a.y), (b.x - a.x));
   mesh.rotation.y = -ang;
   mesh.position.set(mid.x, 0.05, mid.y);
@@ -447,6 +464,7 @@ function computeSpawn() {
   spawnX = start.mid.x + forward.x * 3;
   spawnY = start.mid.y + forward.y * 3;
 
+  // xv += sin(dir), yv += cos(dir)
   spawnDir = Math.atan2(forward.x, forward.y);
 }
 
@@ -480,6 +498,7 @@ function makeCar(hexColor) {
     return w;
   }
 
+  // front wheels are children[0] and [1]
   var frontLeft = wheelMesh();
   frontLeft.position.set(-0.75, 0.35, 0.85);
   car.add(frontLeft);
@@ -654,13 +673,20 @@ function showModeMenu() {
   ensureEngine();
   setupInputOnce();
   setupColorPickerOnce();
+
   clearModeUI();
 
+  // UI FIX: hide the original menu controls as soon as Start is pressed
+  hideLobbyUI();
+
+  // Validate name
   var nm = (nameEl && nameEl.value ? nameEl.value : "").trim();
   if (!nm && nameEl) nameEl.value = "Player";
 
-  if (titleEl) titleEl.innerHTML = "Choose Mode";
-  if (startEl) startEl.style.display = "none";
+  if (titleEl) {
+    titleEl.style.display = ""; // ensure visible for mode selection
+    titleEl.innerHTML = "Choose Mode";
+  }
 
   modeWrapEl = document.createElement("div");
   modeWrapEl.id = "modewrap";
@@ -678,27 +704,6 @@ function showModeMenu() {
   mkButton("HOST", 30, function () { hostFlow(); });
   mkButton("JOIN", 55, function () { joinFlow(); });
   mkButton("SOLO", 80, function () { soloFlow(); });
-}
-
-// HIDE ALL main menu items once game starts (fixes your issue)
-function hideMainMenu() {
-  if (!foreEl) return;
-
-  // Hide anything tagged menuitem
-  var items = document.getElementsByClassName("menuitem");
-  for (var i = 0; i < items.length; i++) {
-    items[i].style.display = "none";
-  }
-
-  // Also hide known menu IDs (safe even if missing)
-  var ids = ["title", "name", "colorpicker", "start", "divider", "mywebsitelink"];
-  for (var j = 0; j < ids.length; j++) {
-    var el = document.getElementById(ids[j]);
-    if (el) el.style.display = "none";
-  }
-
-  // Remove any mode UI overlays
-  clearModeUI();
 }
 
 // ====== Toolbar tools ======
@@ -767,7 +772,7 @@ function detachRoomListeners() {
   try {
     if (playersRef) playersRef.off();
     if (startRef) startRef.off();
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function clearPlayers() {
@@ -1003,14 +1008,15 @@ function startGame() {
   if (gameStarted) return;
 
   gameStarted = true;
-  hideMainMenu();
+
+  // UI FIX: remove all menu layers once the game starts
+  hideAllMenusForGameplay();
   showOverlayMsg("");
 
-  startCountdown();
+  startCountdown(function () { });
 }
 
-// SINGLE correct countdown (no duplicates)
-function startCountdown() {
+function startCountdown(done) {
   gameSortaStarted = true;
   var t = 3;
 
@@ -1032,6 +1038,7 @@ function startCountdown() {
       }
 
       gameSortaStarted = false;
+      if (done) done();
       return;
     }
 
@@ -1135,9 +1142,9 @@ function handleCheckpoints() {
     var cp = cpSegs[i];
 
     var ab = cp.b.clone().sub(cp.a);
-    var tt = 0;
-    if (cp.len2 > 1e-9) tt = clamp(pos.clone().sub(cp.a).dot(ab) / cp.len2, 0, 1);
-    var closest = cp.a.clone().add(ab.multiplyScalar(tt));
+    var t = 0;
+    if (cp.len2 > 1e-9) t = clamp(pos.clone().sub(cp.a).dot(ab) / cp.len2, 0, 1);
+    var closest = cp.a.clone().add(ab.multiplyScalar(t));
 
     var dist = pos.distanceTo(closest);
     if (dist > 1.1) continue;
@@ -1154,7 +1161,7 @@ function handleCheckpoints() {
 
   if (me.data.lap > LAPS && countdownEl && countdownEl.innerHTML === "") {
     countdownEl.style.fontSize = "14vmin";
-    countdownEl.innerHTML = (me.data.name || "Player").replace(/</g, "&lt;") + " Won!";
+    countdownEl.innerHTML = (me.data.name || "Player").replaceAll("<", "&lt;") + " Won!";
   }
 }
 
@@ -1255,6 +1262,7 @@ function renderLoop(ts) {
   }
 
   updateLabels();
+
   renderer.render(scene, camera);
   MODS();
 }
@@ -1286,12 +1294,12 @@ if (document.readyState === "loading") {
 window.menu2 = showModeMenu;
 window.host = hostFlow;
 window.joinGame = joinFlow;
-window.codeCheck = function () {};
+window.codeCheck = function () { };
 window.updateColor = function (x01) { setSliderFrom01(x01); };
 
 // Clean up firebase presence on close
 window.addEventListener("beforeunload", function () {
   try {
     if (me && me.ref) me.ref.remove();
-  } catch (e) {}
+  } catch (e) { }
 });
