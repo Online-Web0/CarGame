@@ -186,7 +186,7 @@ canvas {
 	background-color: rgba(0, 0, 0, 0.5);
 	position: absolute;
 	right: 1vmin;
-	bottom: 9vmin;
+	bottom: 11vmin;
 	transform: scaleY(0);
 	transition: transform .5s, -webkit-transform .5s;
 	transform-origin: 50% 87.5%;
