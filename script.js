@@ -1022,16 +1022,18 @@ function startGame() {
 
   gameStarted = true;
 
+  if (foreEl) foreEl.style.display = "none";
+
   hideAllMenusForGameplay();
 
-  // FIX: remove JOIN UI leftovers
   safeRemove(document.getElementById("incode"));
   safeRemove(document.getElementById("startgame"));
 
   showOverlayMsg("");
 
-  startCountdown(function () { });
+  startCountdown(function () {});
 }
+
 
 function startCountdown(done) {
   gameSortaStarted = true;
