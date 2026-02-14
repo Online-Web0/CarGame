@@ -1011,22 +1011,15 @@ function startGame() {
 
   gameStarted = true;
 
-  // Remove ALL menu UI
-  clearModeUI();
+  hideAllMenusForGameplay();
 
+  // FIX: remove JOIN UI leftovers
   safeRemove(document.getElementById("incode"));
   safeRemove(document.getElementById("startgame"));
 
-  setDisplay("title", "none");
-  setDisplay("fore", "none");
-
-  hideLobbyUI();
-
   showOverlayMsg("");
 
-  startCountdown(function () {});
-}
-
+  startCountdown(function () { });
 }
 
 function startCountdown(done) {
