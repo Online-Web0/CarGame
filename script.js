@@ -698,7 +698,7 @@ function showModeMenu() {
 
   if (titleEl) {
     titleEl.style.display = ""; // ensure visible for mode selection
-    titleEl.innerHTML = "=";
+    titleEl.innerHTML = "";
   }
 
   modeWrapEl = document.createElement("div");
