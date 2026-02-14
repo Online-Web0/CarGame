@@ -184,7 +184,7 @@ canvas {
 	border-radius: 11vmin;
 	background-color: rgba(0, 0, 0, 0.5);
 
-	position: absolute;
+	position: fixed;
 	right: 1vmin;
 	bottom: 18vmin;   /* sits just above the gear */
 
