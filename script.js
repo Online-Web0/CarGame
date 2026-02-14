@@ -117,31 +117,11 @@ function collideWithPlayers() {
 
         p.data.xv -= n.x * force;
         p.data.yv -= n.y * force;
-    }
-  }
-}
 
 }
 
-
-      // --- bounce velocities ---
-      var myVel = vec2(me.data.xv, me.data.yv);
-      var otherVel = vec2(p.data.xv || 0, p.data.yv || 0);
-
-      var relVel = myVel.clone().sub(otherVel);
-
-      if (relVel.dot(n) < 0) {
-        var impulse = relVel.dot(n) * 0.8;
-
-        me.data.xv -= n.x * impulse;
-        me.data.yv -= n.y * impulse;
-
-        p.data.xv += n.x * impulse;
-        p.data.yv += n.y * impulse;
-      }
-    }
-  }
 }
+
 
 
 // ====== Input state ======
