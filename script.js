@@ -455,13 +455,16 @@ function computeSpawn() {
   }
 
   var start = cpSegs[0];
-  var forward = start.normal.clone();
 
-  if (cpSegs.length > 1) {
-    var chk = cpSegs[1];
-    var v = chk.mid.clone().sub(start.mid);
-    if (v.dot(forward) < 0) forward.multiplyScalar(-1);
-  }
+  // Use checkpoint segment direction instead of normal
+  var dirVec = start.b.clone().sub(start.a);
+  dirVec.normalize();
+
+  spawnX = start.mid.x;
+  spawnY = start.mid.y;
+
+  spawnDir = Math.atan2(dirVec.x, dirVec.y);
+}
 
   spawnX = start.mid.x + forward.x * 3;
   spawnY = start.mid.y + forward.y * 3;
