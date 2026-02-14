@@ -13,6 +13,8 @@ var WALL_SIZE = 1.2;
 var MOUNTAIN_DIST = 2500;
 var OOB_DIST = 2000;
 var LAPS = 3;
+var NITRO_MULT = 2.2;
+var nitro = false;
 
 // New tuning
 var MAX_SPEED = 0.36;
@@ -606,21 +608,24 @@ function setupInputOnce() {
   if (setupInputOnce._did) return;
   setupInputOnce._did = true;
 
-  window.addEventListener("keydown", function (e) {
-    var k = e.key;
-    if (k === "ArrowLeft" || k === "a" || k === "A") left = true;
-    if (k === "ArrowRight" || k === "d" || k === "D") right = true;
-    if (k === "ArrowUp" || k === "w" || k === "W") up = true;
-    if (k === "ArrowDown" || k === "s" || k === "S") down = true;
-  });
+window.addEventListener("keydown", function (e) {
+  var k = e.key;
+  if (k === "ArrowLeft" || k === "a" || k === "A") left = true;
+  if (k === "ArrowRight" || k === "d" || k === "D") right = true;
+  if (k === "ArrowUp" || k === "w" || k === "W") up = true;
+  if (k === "ArrowDown" || k === "s" || k === "S") down = true;
+  if (k === "Shift") nitro = true;
+});
 
-  window.addEventListener("keyup", function (e) {
-    var k = e.key;
-    if (k === "ArrowLeft" || k === "a" || k === "A") left = false;
-    if (k === "ArrowRight" || k === "d" || k === "D") right = false;
-    if (k === "ArrowUp" || k === "w" || k === "W") up = false;
-    if (k === "ArrowDown" || k === "s" || k === "S") down = false;
-  });
+window.addEventListener("keyup", function (e) {
+  var k = e.key;
+  if (k === "ArrowLeft" || k === "a" || k === "A") left = false;
+  if (k === "ArrowRight" || k === "d" || k === "D") right = false;
+  if (k === "ArrowUp" || k === "w" || k === "W") up = false;
+  if (k === "ArrowDown" || k === "s" || k === "S") down = false;
+  if (k === "Shift") nitro = false;
+});
+
 
   function updateTouch(touches) {
     left = right = up = down = false;
@@ -1163,7 +1168,7 @@ function updateMePhysics(warp) {
 
   var brake = down ? 0.82 : 1.0;
 
-var ACCEL = SPEED * 2.0;
+var ACCEL = SPEED * 2.0 * (nitro ? NITRO_MULT : 1);
 var FRICTION = 0.965;
 var DRAG = 0.992;
 
