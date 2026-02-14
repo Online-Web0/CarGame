@@ -59,9 +59,9 @@ function update(){
 
 c.fillRect(
     width / 2 - scale,
-    height / 2 - scale,
+    height / 2 - scale * 1.5,
     scale * 2,
-    scale * 2
+    scale * 3
 );
 
 	c.translate(offset.x, offset.y);
