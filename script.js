@@ -1041,6 +1041,7 @@ function startGame() {
   gameStarted = true;
 
   if (foreEl) foreEl.style.display = "none";
+
   hideAllMenusForGameplay();
 
   safeRemove(document.getElementById("incode"));
@@ -1049,12 +1050,6 @@ function startGame() {
   showOverlayMsg("");
 
   startCountdown(function () {});
-
-  setTimeout(function () {
-    playerCollisionEnabled = true;
-  }, 5000);
-}
-
 }
 
 
