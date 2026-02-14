@@ -15,6 +15,11 @@ var OOB_DIST = 2000;
 var LAPS = 3;
 var NITRO_MULT = 2.2;
 var nitro = false;
+var NITRO_MAX = 100;
+var nitroFuel = NITRO_MAX;
+
+var NITRO_DRAIN = 35;   // per second
+var NITRO_REGEN = 18;   // per second
 
 // New tuning
 var MAX_SPEED = 0.36;
@@ -1168,13 +1173,22 @@ function updateMePhysics(warp) {
 
   var brake = down ? 0.82 : 1.0;
 
-var ACCEL = SPEED * (nitro ? 5.0 : 2.0);
+var usingNitro = nitro && nitroFuel > 0;
+
+var ACCEL = SPEED * (usingNitro ? 5.0 : 2.0);
 var FRICTION = 0.965;
 var DRAG = 0.992;
 
 // Only accelerate when pressing UP / W
 var REVERSE_ACCEL = ACCEL * 2.3;   // slower than forward
 var MAX_REVERSE = MAX_SPEED * 0.45;
+if (usingNitro) {
+  nitroFuel -= NITRO_DRAIN * warp * 0.016;
+} else {
+  nitroFuel += NITRO_REGEN * warp * 0.016;
+}
+
+nitroFuel = clamp(nitroFuel, 0, NITRO_MAX);
 
 if (up) {
   me.data.xv += Math.sin(me.data.dir) * ACCEL * warp;
@@ -1199,7 +1213,7 @@ var forwardSpeed =
   me.data.xv * Math.sin(me.data.dir) +
   me.data.yv * Math.cos(me.data.dir);
 
-var topSpeed = nitro ? MAX_SPEED * 1.6 : MAX_SPEED;
+var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
 
 if (forwardSpeed > topSpeed) {
   var s = topSpeed / forwardSpeed;
