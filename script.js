@@ -1011,8 +1011,12 @@ function startGame() {
 
   gameStarted = true;
 
-  // UI FIX: remove all menu layers once the game starts
   hideAllMenusForGameplay();
+
+  // FIX: remove JOIN UI leftovers
+  safeRemove(document.getElementById("incode"));
+  safeRemove(document.getElementById("startgame"));
+
   showOverlayMsg("");
 
   startCountdown(function () { });
