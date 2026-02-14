@@ -183,11 +183,11 @@ function parseV2(tok) {
 
   var x = parseFloat(parts[0]);
   var y = parseFloat(parts[1]);
-
   if (!isFinite(x) || !isFinite(y)) return null;
 
-  return vec2(x, y);
+  return vec2(-x, -y);
 }
+
 
 
 function parseSeg(tok) {
