@@ -80,9 +80,6 @@ function collideWithPlayers() {
   if (!playerCollisionEnabled || !me) return;
 
   var myPos = vec2(me.data.x, me.data.y);
-  var myVel = vec2(me.data.xv, me.data.yv);
-
-  var radius = 0.95;
 
   for (var k in players) {
     if (!players.hasOwnProperty(k)) continue;
@@ -92,43 +89,8 @@ function collideWithPlayers() {
     if (!p || !p.data) continue;
 
     var otherPos = vec2(p.data.x, p.data.y);
-    var otherVel = vec2(p.data.xv || 0, p.data.yv || 0);
-
-    var delta = myPos.clone().sub(otherPos);
-    var dist = delta.length();
-
-    if (dist === 0) continue;
-
-    var minDist = radius * 2;
-
-    if (dist < minDist) {
-      var n = delta.normalize();
-      var overlap = (minDist - dist);
-
-      // --- SEPARATE BOTH CARS ---
-      me.data.x += n.x * overlap * 0.5;
-      me.data.y += n.y * overlap * 0.5;
-
-      p.data.x -= n.x * overlap * 0.5;
-      p.data.y -= n.y * overlap * 0.5;
-
-      // --- BOUNCE ---
-      var relVel = myVel.clone().sub(otherVel);
-      var impulse = relVel.dot(n);
-
-      if (impulse < 0) {
-        var bounce = 1.2;
-
-        me.data.xv -= n.x * impulse * bounce;
-        me.data.yv -= n.y * impulse * bounce;
-
-        p.data.xv += n.x * impulse * bounce;
-        p.data.yv += n.y * impulse * bounce;
-      }
-    }
-  }
-}
-
+   var dx = myPos.x - otherPos.x;
+var dy = myPos.y - otherPos.y;
 
 // car dimensions
 var halfWidth = 0.8;
