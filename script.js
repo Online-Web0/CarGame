@@ -453,20 +453,18 @@ function computeSpawn() {
     spawnX = 0; spawnY = 0; spawnDir = 0;
     return;
   }
-  var start = cpSegs[0];
-  var forward = start.normal.clone();
 
-  if (cpSegs.length > 1) {
-    var chk = cpSegs[1];
-    var v = chk.mid.clone().sub(start.mid);
-    if (v.dot(forward) < 0) forward.multiplyScalar(-1);
-  }
+  var start = cpSegs[0];
+
+  // flip direction so car faces track
+  var forward = start.normal.clone().multiplyScalar(-1);
 
   spawnX = start.mid.x + forward.x * 3;
   spawnY = start.mid.y + forward.y * 3;
 
-  // xv += sin(dir), yv += cos(dir)
-spawnDir = Math.atan2(forward.y, forward.x) - Math.PI / 2;
+  spawnDir = Math.atan2(forward.x, forward.y);
+}
+
 
 }
 
