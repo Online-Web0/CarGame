@@ -170,12 +170,14 @@ function ensureEngine() {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   // Put canvas behind UI
-  renderer.domElement.style.position = "fixed";
-  renderer.domElement.style.top = "0";
-  renderer.domElement.style.left = "0";
-  renderer.domElement.style.zIndex = "-1";
+renderer.domElement.style.position = "fixed";
+renderer.domElement.style.top = "0";
+renderer.domElement.style.left = "0";
+renderer.domElement.style.zIndex = "0";
+renderer.domElement.style.pointerEvents = "none"; // THIS LINE FIXES IT
 
-  document.body.insertBefore(renderer.domElement, document.body.firstChild);
+document.body.appendChild(renderer.domElement);
+
 
   // Groups
   mapGroup = new THREE.Group();
