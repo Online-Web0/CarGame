@@ -94,16 +94,24 @@ c.fillRect(
 		c.arc(scale * trees[i].x, scale * trees[i].y, 5, 0, 2 * Math.PI);
 		c.fill();
 	}
-c.fillStyle = "#08cc3c";
+c.strokeStyle = "#f00";
+c.lineWidth = 2;
+c.beginPath();
 
-for(var i = 0; i < arrows.length; i++){
-    c.fillRect(
-        scale * arrows[i].x,
-        scale * arrows[i].y,
-        scale * 2,
-        scale * 2
+for (var i = 0; i < arrows.length; i++) {
+    var x = scale * arrows[i].x;
+    var y = scale * arrows[i].y;
+    var len = scale * 2;
+
+    c.moveTo(x, y);
+    c.lineTo(
+        x - Math.cos(arrows[i].angle) * len,
+        y - Math.sin(arrows[i].angle) * len
     );
 }
+
+c.stroke();
+
 
 	c.translate(-offset.x, -offset.y);
 }
