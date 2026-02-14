@@ -92,7 +92,7 @@ function collideWithPlayers() {
     var delta = myPos.clone().sub(otherPos);
     var dist = delta.length();
 
-    var radius = 1.2; // car size
+    var radius = 0.9; // car size
 
     if (dist < radius * 2 && dist > 0.001) {
       delta.normalize();
@@ -1138,6 +1138,7 @@ collideMeWithWalls();
 collideWithPlayers();
 handleCheckpoints();
 
+
   var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
 
@@ -1167,8 +1168,10 @@ handleCheckpoints();
   me.data.x += me.data.xv * warp;
   me.data.y += me.data.yv * warp;
 
-  collideMeWithWalls();
-  handleCheckpoints();
+collideMeWithWalls();
+collideWithPlayers();
+handleCheckpoints();
+
 
 if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
   me.data.x = spawnX;
