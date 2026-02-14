@@ -5,7 +5,7 @@
 var SPEED = .016;
 var CAMERA_LAG = 0.82;
 var COLLISION = 1.1;        // kept (used only for optional player collisions)
-var BOUNCE = 0.7;
+var BOUNCE = 1.15;
 var mapscale = 500;
 var VR = false;
 var BOUNCE_CORRECT = 0.01;
@@ -1220,11 +1220,18 @@ function collideMeWithWalls() {
     var dist = delta.length();
     if (dist < WALL_SIZE) {
       var n = (dist > 1e-6) ? delta.multiplyScalar(1 / dist) : vec2(0, 1);
-      if (v.dot(n) < 0) {
-       v = reflect2(v, n);
-        v.add(n.clone().multiplyScalar(BOUNCE_CORRECT));
-     v.multiplyScalar(0.9);
-      }
+    if (v.dot(n) < 0) {
+  var speed = v.length();
+
+  v = reflect2(v, n);
+
+  // strong arcade bounce
+  v.multiplyScalar(BOUNCE);
+
+  // push car outward so it never sticks
+  p.add(n.clone().multiplyScalar(0.08 + speed * 0.4));
+}
+
       p = c.add(n.multiplyScalar(WALL_SIZE + 0.001));
     }
   }
