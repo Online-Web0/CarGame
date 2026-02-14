@@ -1159,11 +1159,19 @@ function handleCheckpoints() {
       me.data.checkpoint = 1;
     }
   }
+if (me.data.lap > LAPS && countdownEl) {
+  gameSortaStarted = true;
 
-  if (me.data.lap > LAPS && countdownEl && countdownEl.innerHTML === "") {
-    countdownEl.style.fontSize = "14vmin";
-    countdownEl.innerHTML = (me.data.name || "Player").replaceAll("<", "&lt;") + " Won!";
-  }
+  countdownEl.style.display = "block";
+  countdownEl.style.fontSize = "18vmin";
+  countdownEl.innerHTML =
+    (me.data.name || "Player").replaceAll("<", "&lt;") +
+    "<br>WINS!";
+
+  me.data.xv = 0;
+  me.data.yv = 0;
+}
+
 }
 
 function updateCamera(warp) {
