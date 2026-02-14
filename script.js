@@ -179,12 +179,23 @@ function showLobbyUI() {
 }
 
 function hideAllMenusForGameplay() {
-  // When the race actually starts, remove ALL menu UI layers except settings/toolbar + HUD
   clearModeUI();
+
+  // remove join / host UI
+  safeRemove(document.getElementById("incode"));
+  safeRemove(document.getElementById("startgame"));
+  safeRemove(document.getElementById("code"));
+  safeRemove(document.getElementById("modewrap"));
+
   setDisplay("title", "none");
   hideLobbyUI();
+
+  // keep fore container but prevent it blocking clicks
+  if (foreEl) foreEl.style.pointerEvents = "none";
+
   if (settingsEl) settingsEl.style.display = "none";
 }
+
 
 // ====== Engine init ======
 function ensureEngine() {
