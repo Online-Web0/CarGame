@@ -566,10 +566,11 @@ function computeSpawn() {
     if (v.dot(forward) < 0) forward.multiplyScalar(-1);
   }
 
-  spawnX = start.mid.x + forward.x * 3;
-  spawnY = start.mid.y + forward.y * 3;
+ spawnX = start.mid.x + forward.x * 5;
+spawnY = start.mid.y + forward.y * 5;
 
-  spawnDir = Math.atan2(forward.x, forward.y);
+
+  spawnDir = Math.atan2(forward.y, forward.x);
 }
 
 
