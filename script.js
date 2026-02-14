@@ -1441,26 +1441,20 @@ function renderLoop(ts) {
   timepassed = Math.min(timepassed, 50);
   var warp = timepassed / 16;
 
-  if (gameStarted && me) {
-    if (!gameSortaStarted) updateMePhysics(warp);
-    updateRemoteVisuals(warp);
-    updateCamera(warp);
-    updateHud();
-    maybeSendToFirebase(ts);
-  } else {
-    var a = ts * 0.0004;
-    camera.position.set(50 * Math.sin(a), 20, 50 * Math.cos(a));
-    camera.lookAt(new THREE.Vector3(0, 0, 0));
-    updateRemoteVisuals(warp);
-  }
-if (gameStarted && me) {
+ if (gameStarted && me) {
   if (!gameSortaStarted) updateMePhysics(warp);
   updateRemoteVisuals(warp);
   updateCamera(warp);
   updateHud();
-  updateNitroUI();      // <-- add this
+  updateNitroUI();
   maybeSendToFirebase(ts);
+} else {
+  var a = ts * 0.0004;
+  camera.position.set(50 * Math.sin(a), 20, 50 * Math.cos(a));
+  camera.lookAt(new THREE.Vector3(0, 0, 0));
+  updateRemoteVisuals(warp);
 }
+
 
   updateLabels();
 
