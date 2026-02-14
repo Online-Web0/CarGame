@@ -89,27 +89,19 @@ c.fillRect(
 	}
 	c.stroke();
 	c.fillStyle="#08cc3c";
-for(var i = 0; i < trees.length; i++){
-    c.beginPath();
-    c.arc(scale * trees[i].x, scale * trees[i].y, 5, 0, 2 * Math.PI);
-    c.fill();
-}
-
-// RED ARROWS
-c.strokeStyle = "#f00";
-c.beginPath();
+	for(var i = 0; i < trees.length; i++){
+		c.beginPath();
+		c.arc(scale * trees[i].x, scale * trees[i].y, 5, 0, 2 * Math.PI);
+		c.fill();
+	}
+c.fillStyle = "#08cc3c";
 
 for(var i = 0; i < arrows.length; i++){
-    c.moveTo(scale * arrows[i].x, scale * arrows[i].y);
-    c.lineTo(
-        scale * arrows[i].x - scale * Math.cos(arrows[i].angle) / 2,
-        scale * arrows[i].y - scale * Math.sin(arrows[i].angle) / 2
-    );
-}
-
-c.stroke();
-
-
+    c.fillRect(
+        scale * arrows[i].x,
+        scale * arrows[i].y,
+        scale * 2,
+        scale * 2
     );
 }
 
