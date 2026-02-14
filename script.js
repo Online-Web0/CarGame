@@ -560,21 +560,6 @@ function computeSpawn() {
 
   spawnDir = Math.atan2(forward.x, forward.y);
 }
-// forward along the start line direction rotated 90deg so you drive "through" it
-var along = start.dir.clone();
-if (along.lengthSq() < 1e-9) along = vec2(0, 1);
-along.normalize();
-
-// pick a forward direction that points toward checkpoint 2 if it exists
-var fwd = vec2(-along.y, along.x); // perpendicular to the line
-if (cpSegs.length > 1) {
-  var toNext = cpSegs[1].mid.clone().sub(start.mid);
-  if (toNext.dot(fwd) < 0) fwd.multiplyScalar(-1);
-}
-
-spawnX = start.mid.x + fwd.x * 3;
-spawnY = start.mid.y + fwd.y * 3;
-spawnDir = Math.atan2(fwd.x, fwd.y);
 
 
 // ====== Cars + labels ======
@@ -1288,9 +1273,8 @@ me.data.dir = spawnDir;
   me.model.position.z = me.data.y;
   me.model.rotation.y = me.data.dir;
 
- if (me.model.children[2]) me.model.children[2].rotation.y = -me.data.steer;
-if (me.model.children[3]) me.model.children[3].rotation.y = -me.data.steer;
-
+  if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
+  if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
 }
 
 function collideMeWithWalls() {
@@ -1426,9 +1410,7 @@ function updateHud() {
   var roomText = ROOM ? (" | " + ROOM) : "";
   lapEl.style.fontSize = "26px";
   lapEl.style.lineHeight = "28px";
- var lapText = (me.data.lap <= LAPS) ? (me.data.lap + "/" + LAPS) : "Finished";
-lapEl.innerHTML = "Lap " + lapText + " | Spd " + spd.toFixed(2) + roomText;
-
+  lapEl.innerHTML = "Lap " + (me.data.lap <= LAPS ? (me.data.lap + "/" + LAPS) : "") + " | Spd " + spd.toFixed(2) + roomText;
 }
 
 function maybeSendToFirebase(ts) {
