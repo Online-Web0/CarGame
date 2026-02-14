@@ -178,14 +178,17 @@ function segClosestPoint(p, a, b) {
 }
 
 function parseV2(tok) {
-  // "x,y"
   var parts = tok.split(",");
   if (parts.length !== 2) return null;
+
   var x = parseFloat(parts[0]);
   var y = parseFloat(parts[1]);
+
   if (!isFinite(x) || !isFinite(y)) return null;
-  return vec2(x, -y);
+
+  return vec2(x, y);
 }
+
 
 function parseSeg(tok) {
   // "x1,y1/x2,y2"
