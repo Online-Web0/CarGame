@@ -466,7 +466,8 @@ function computeSpawn() {
   spawnY = start.mid.y + forward.y * 3;
 
   // xv += sin(dir), yv += cos(dir)
-  spawnDir = Math.atan2(forward.x, forward.y);
+spawnDir = Math.atan2(forward.y, forward.x) - Math.PI / 2;
+
 }
 
 // ====== Cars + labels ======
@@ -1098,7 +1099,8 @@ if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
   me.data.y = spawnY;
   me.data.xv = 0;
   me.data.yv = 0;
-  me.data.dir = spawnDir + Math.PI;
+me.data.dir = spawnDir;
+
 }
 
 
