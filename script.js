@@ -84,7 +84,7 @@ function collideWithPlayers() {
   var pPos = vec2(me.data.x, me.data.y);
   var pVel = vec2(me.data.xv, me.data.yv);
 
-  var radius = 0.95;
+  var radius = 1.35;
 
   for (var k in players) {
     if (!players.hasOwnProperty(k)) continue;
