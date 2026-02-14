@@ -55,12 +55,15 @@ function update(){
 	ca.height = height;
 	ca.width = width;
 	drawBG();
-	c.fillStyle="#08cc3c";
-	c.beginPath();
-	c.moveTo(width / 2, height / 2 - 10 - scale / 2);
-	c.lineTo(width / 2 - 5, height / 2 + 5 - scale / 2);
-	c.lineTo(width / 2 + 5, height / 2 + 5 - scale / 2);
-	c.fill();
+	c.fillStyle = "#08cc3c";
+
+c.fillRect(
+    width / 2 - scale,
+    height / 2 - scale,
+    scale * 2,
+    scale * 2
+);
+
 	c.translate(offset.x, offset.y);
 	c.lineCap = "round";
 	c.lineWidth = 2;
