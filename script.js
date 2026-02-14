@@ -1072,7 +1072,7 @@ function startGame() {
   gameStarted = true;
   playerCollisionEnabled = false;   // reset each round
 
-  gameStarted = true;
+  
 
   if (foreEl) foreEl.style.display = "none";
   hideAllMenusForGameplay();
