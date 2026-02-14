@@ -57,15 +57,11 @@ function update(){
 	drawBG();
 	c.fillStyle = "#08cc3c";
 
-c.fillStyle = "#08cc3c";
-
 c.fillRect(
     width / 2 - scale,
-    height / 2 - scale * 1.5,
+    height / 2 - scale,
     scale * 2,
-    scale * 3
-);
-
+    scale * 2
 );
 
 	c.translate(offset.x, offset.y);
