@@ -61,14 +61,17 @@ function update(){
 	c.lineTo(width / 2 - 5, height / 2 + 5 - scale / 2);
 	c.lineTo(width / 2 + 5, height / 2 + 5 - scale / 2);
 	c.fill();
-	c.translate(offset.x, offset.y);
+	c.translate(width / 2, height / 2);
+c.scale(1, -1);
+
 	c.lineCap = "round";
 	c.lineWidth = 2;
 	c.strokeStyle="#f48342";
 	c.beginPath();
 	for(var i = 0; i < walls.length; i++){
-		c.moveTo(scale * walls[i].start.x, height - scale * walls[i].start.y);
-		c.lineTo(scale * walls[i].end.x, height - scale * walls[i].end.y);
+	c.moveTo(scale * (walls[i].start.x - width/(2*scale)), scale * (walls[i].start.y - height/(2*scale)));
+c.lineTo(scale * (walls[i].end.x - width/(2*scale)), scale * (walls[i].end.y - height/(2*scale)));
+
 
 	}
 	c.stroke();
@@ -235,7 +238,7 @@ function imp(){
 		walls.push({
 			start: {
 				x: parseInt(t[0].split(",")[0]) + Math.floor(width / scale / 2),
-				y: -parseInt(t[0].split(",")[1]) + Math.floor(height / scale / 2)
+				y: parseInt(t[0].split(",")[1]) + Math.floor(height / scale / 2)
 			},
 			end: {
 				x: parseInt(t[1].split(",")[0]) + Math.floor(width / scale / 2),
@@ -269,7 +272,7 @@ function imp(){
 
 		trees.push({
 			x: parseInt(treesText[i].split(",")[0]) + Math.floor(width / scale / 2),
-			y: -parseInt(treesText[i].split(",")[1]) + Math.floor(height / scale / 2)
+			y: parseInt(t[0].split(",")[2]) + Math.floor(height / scale / 2)
 		});
 	}
 
