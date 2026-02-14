@@ -1225,8 +1225,8 @@ function updateHud() {
   if (!lapEl || !me || !me.data) return;
   var spd = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   var roomText = ROOM ? (" | " + ROOM) : "";
-  lapEl.style.fontSize = "12px";
-  lapEl.style.lineHeight = "14px";
+  lapEl.style.fontSize = "20px";
+  lapEl.style.lineHeight = "22px";
   lapEl.innerHTML = "Lap " + (me.data.lap <= LAPS ? (me.data.lap + "/" + LAPS) : "") + " | Spd " + spd.toFixed(2) + roomText;
 }
 
