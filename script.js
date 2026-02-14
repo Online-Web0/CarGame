@@ -2,7 +2,7 @@
 // Works with the provided index.html / style.css structure in your project.
 
 // ====== TUNING (your values kept) ======
-var SPEED = 1.004;
+var SPEED = .024;
 var CAMERA_LAG = 0.82;
 var COLLISION = 1.1;        // kept (used only for optional player collisions)
 var BOUNCE = 0.7;
