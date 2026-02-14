@@ -281,19 +281,30 @@ function imp(){
 	}
 
 arrows = [];
-for(var i = 0; i < arrowsText.length; i++){
-    var t = arrowsText[i].split("/");
-    if(t.length < 2)
-        continue;
+
+for (var i = 0; i < arrowsText.length; i++) {
+    var entry = arrowsText[i].trim();
+    if (!entry) continue;
+
+    var t = entry.split("/");
+    if (t.length < 2) continue;
 
     var coords = t[0].split(",");
+    if (coords.length < 3) continue;
+
+    var gx = parseInt(coords[0]);
+    var gy = parseInt(coords[2]);
+    var ang = parseInt(t[1]);
+
+    if (isNaN(gx) || isNaN(gy) || isNaN(ang)) continue;
 
     arrows.push({
-        x: parseInt(coords[0]) + Math.floor(width / scale / 2),
-        y: -parseInt(coords[2]) + Math.floor(height / scale / 2),
-        angle: (90 - parseInt(t[1])) * Math.PI / 180
+        x: gx + Math.floor(width / scale / 2),
+        y: -gy + Math.floor(height / scale / 2),
+        angle: (90 - ang) * Math.PI / 180
     });
 }
+
 
 }
 
