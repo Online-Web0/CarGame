@@ -92,19 +92,39 @@ function collideWithPlayers() {
     var delta = myPos.clone().sub(otherPos);
     var dist = delta.length();
 
-    var radius = 0.9; // car size
+    var radius = 0.9;
 
     if (dist < radius * 2 && dist > 0.001) {
-      delta.normalize();
+      var n = delta.normalize();
 
-      me.data.x += delta.x * 0.2;
-      me.data.y += delta.y * 0.2;
+      // --- separate cars ---
+      var overlap = (radius * 2 - dist) * 0.5;
 
-      me.data.xv *= 0.7;
-      me.data.yv *= 0.7;
+      me.data.x += n.x * overlap;
+      me.data.y += n.y * overlap;
+
+      p.data.x -= n.x * overlap;
+      p.data.y -= n.y * overlap;
+
+      // --- bounce velocities ---
+      var myVel = vec2(me.data.xv, me.data.yv);
+      var otherVel = vec2(p.data.xv || 0, p.data.yv || 0);
+
+      var relVel = myVel.clone().sub(otherVel);
+
+      if (relVel.dot(n) < 0) {
+        var impulse = relVel.dot(n) * 0.8;
+
+        me.data.xv -= n.x * impulse;
+        me.data.yv -= n.y * impulse;
+
+        p.data.xv += n.x * impulse;
+        p.data.yv += n.y * impulse;
+      }
     }
   }
 }
+
 
 // ====== Input state ======
 var left = false;
@@ -1165,8 +1185,8 @@ handleCheckpoints();
     me.data.yv *= s;
   }
 
-  me.data.x += me.data.xv * warp;
-  me.data.y += me.data.yv * warp;
+me.data.x += me.data.xv * warp;
+me.data.y += me.data.yv * warp;
 
 collideMeWithWalls();
 collideWithPlayers();
@@ -1203,9 +1223,9 @@ function collideMeWithWalls() {
     if (dist < WALL_SIZE) {
       var n = (dist > 1e-6) ? delta.multiplyScalar(1 / dist) : vec2(0, 1);
       if (v.dot(n) < 0) {
-        v = reflect2(v, n);
+       v = reflect2(v, n);
         v.add(n.clone().multiplyScalar(BOUNCE_CORRECT));
-        v.multiplyScalar(BOUNCE);
+     v.multiplyScalar(0.9);
       }
       p = c.add(n.multiplyScalar(WALL_SIZE + 0.001));
     }
