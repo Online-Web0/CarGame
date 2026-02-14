@@ -1173,7 +1173,7 @@ var FRICTION = 0.965;
 var DRAG = 0.992;
 
 // Only accelerate when pressing UP / W
-var REVERSE_ACCEL = ACCEL * 0.6;   // slower than forward
+var REVERSE_ACCEL = ACCEL * 2.3;   // slower than forward
 var MAX_REVERSE = MAX_SPEED * 0.45;
 
 if (up) {
