@@ -181,20 +181,21 @@ canvas {
 }
 #toolbar{
 	width: 22vmin;
-	height: 85vmin;
 	border-radius: 11vmin;
 	background-color: rgba(0, 0, 0, 0.5);
+
 	position: absolute;
 	right: 1vmin;
-	bottom: 2vmin;
+	bottom: 22vmin;   /* sits just above the gear */
+
 	transform: scaleY(0);
-	transition: transform .5s;
 	transform-origin: bottom center;
+	transition: transform .5s;
 
 	display: flex;
 	flex-direction: column;
-	justify-content: flex-end;
 	align-items: center;
+	padding: 1vmin 0;
 }
 
 
