@@ -1421,12 +1421,15 @@ function maybeSendToFirebase(ts) {
   me.data.lastSeen = Date.now();
   me.ref.set(me.data);
 }
-var fill = document.getElementById("nitrofill");
-if (fill) {
-  fill.style.width = ((nitroFuel / NITRO_MAX) * 100) + "%";
-}
+
 
 // ====== Main loop ======
+function updateNitroUI() {
+  var fillEl = document.getElementById("nitrofill");
+  if (!fillEl) return;
+  fillEl.style.width = ((nitroFuel / NITRO_MAX) * 100) + "%";
+}
+
 var lastTime = 0;
 function renderLoop(ts) {
   requestAnimationFrame(renderLoop);
@@ -1450,6 +1453,14 @@ function renderLoop(ts) {
     camera.lookAt(new THREE.Vector3(0, 0, 0));
     updateRemoteVisuals(warp);
   }
+if (gameStarted && me) {
+  if (!gameSortaStarted) updateMePhysics(warp);
+  updateRemoteVisuals(warp);
+  updateCamera(warp);
+  updateHud();
+  updateNitroUI();      // <-- add this
+  maybeSendToFirebase(ts);
+}
 
   updateLabels();
 
