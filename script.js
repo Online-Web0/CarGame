@@ -1271,7 +1271,7 @@ me.data.dir = spawnDir;
 
   me.model.position.x = me.data.x;
   me.model.position.z = me.data.y;
-  me.model.rotation.y = me.data.dir + Math.PI;
+  me.model.rotation.y = me.data.dir;
 
   if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
   if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
