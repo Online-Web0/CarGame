@@ -160,6 +160,7 @@ function makeDiv(id, className, text) {
   if (typeof text === "string") d.innerHTML = text;
   return d;
 }
+function Z(y){ return -y; }   // render-space Z from map-space Y
 
 function vec2(x, y) { return new THREE.Vector2(x, y); }
 
@@ -184,7 +185,7 @@ function parseV2(tok) {
   var x = parseFloat(parts[0]);
   var y = parseFloat(parts[1]);
   if (!isFinite(x) || !isFinite(y)) return null;
-  return vec2(x, -y);
+  return vec2(x, y);
 }
 
 function parseSeg(tok) {
@@ -455,9 +456,9 @@ function buildMapFromTrackCode(track) {
     var gGeo = new THREE.PlaneGeometry(w, h);
     gGeo.rotateX(-Math.PI / 2);
     ground.geometry = gGeo;
-    ground.position.set((minX + maxX) / 2, 0, (minY + maxY) / 2);
+    ground.position.set((minX + maxX) / 2, 0, Z((minY + maxY) / 2));
   } else {
-    ground.position.set(0, 0, 0);
+    ground.position.set(0, 0, Z(0));
   }
 
   computeSpawn();
@@ -480,7 +481,7 @@ function addWall(a2, b2) {
 
   var ang = Math.atan2((b.y - a.y), (b.x - a.x));
   mesh.rotation.y = -ang;
-  mesh.position.set(mid.x, 1.5, mid.y);
+  mesh.position.set(mid.x, 1.5, Z(mid.y));
 
   mapGroup.add(mesh);
 
@@ -513,7 +514,7 @@ function addCheckpoint(a2, b2, isStart) {
 
   var ang = Math.atan2((b.y - a.y), (b.x - a.x));
   mesh.rotation.y = -ang;
-  mesh.position.set(mid.x, 0.05, mid.y);
+  mesh.position.set(mid.x, 0.05, Z(mid.y));
 
   cpGroup.add(mesh);
 
@@ -525,7 +526,7 @@ function addTree(x, y) {
     new THREE.CylinderGeometry(0.2, 0.25, 1.2, 8),
     new THREE.MeshStandardMaterial({ color: 0x5a3b1e, roughness: 1 })
   );
-  trunk.position.set(x, 0.6, y);
+  trunk.position.set(x, 0.6, Z(y));
   trunk.castShadow = true;
   trunk.receiveShadow = true;
 
@@ -533,7 +534,7 @@ function addTree(x, y) {
     new THREE.ConeGeometry(0.9, 1.8, 10),
     new THREE.MeshStandardMaterial({ color: 0x1f7a3a, roughness: 1 })
   );
-  top.position.set(x, 2.0, y);
+  top.position.set(x, 2.0, Z(y));
   top.castShadow = true;
 
   decoGroup.add(trunk);
@@ -958,7 +959,7 @@ function createLocalPlayerFirebase() {
 
   var hex = parseInt(color.replace("#", "0x"), 16);
   var model = makeCar(hex);
-  model.position.set(data.x, 0, data.y);
+  model.position.set(data.x, 0, Z(data.y));
   model.rotation.y = data.dir;
   scene.add(model);
 
@@ -1107,7 +1108,7 @@ function soloFlow() {
 
   var hex = parseInt(color.replace("#", "0x"), 16);
   var model = makeCar(hex);
-  model.position.set(data.x, 0, data.y);
+  model.position.set(data.x, 0, Z(data.y));
   model.rotation.y = data.dir;
   scene.add(model);
 
@@ -1270,7 +1271,7 @@ me.data.dir = spawnDir;
 
 
   me.model.position.x = me.data.x;
-  me.model.position.z = me.data.y;
+  me.model.position.z = Z(me.data.y);
   me.model.rotation.y = me.data.dir;
 
   if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
