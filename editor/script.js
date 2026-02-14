@@ -2,6 +2,8 @@ var walls = [];
 var start = [];
 var trees = [];
 var arrows = [];
+var spawn = { x: 0, y: 0, angle: 0 };
+
 var erase = [];
 var hist = [];
 
@@ -55,16 +57,23 @@ function update(){
 	ca.height = height;
 	ca.width = width;
 	drawBG();
-	c.fillStyle = "#08cc3c";
+	// draw spawn square
 
-c.fillRect(
-    width / 2 - scale,
-    height / 2 - scale * 1.5,
-    scale * 2,
-    scale * 3
-);
+
 
 	c.translate(offset.x, offset.y);
+	c.fillStyle = "#08cc3c";
+c.fillRect(scale * spawn.x - scale, scale * spawn.y - scale, scale * 2, scale * 2);
+
+// draw spawn direction arrow
+c.strokeStyle = "#ffffff";
+c.beginPath();
+c.moveTo(scale * spawn.x, scale * spawn.y);
+c.lineTo(
+    scale * spawn.x + Math.cos(spawn.angle) * scale * 2,
+    scale * spawn.y + Math.sin(spawn.angle) * scale * 2
+);
+c.stroke();
 	c.lineCap = "round";
 	c.lineWidth = 2;
 	c.strokeStyle="#f48342";
@@ -169,7 +178,13 @@ ca.onmousedown = function(e){
 			x: gridX(mouse.start.x),
 			y: gridY(mouse.start.y),
 			angle: 0
+	
 		});
+	if(sel == 5){
+    spawn.x = gridX(mouse.start.x);
+    spawn.y = gridY(mouse.start.y);
+}
+
 	if(sel == 4)
 		eraseL(gridX(mouse.cur.x), gridY(mouse.cur.y));
 }
@@ -196,6 +211,13 @@ ca.onmousemove = function(e){
 		arrows[arrows.length - 1].angle = Math.atan2(mouse.start.y - mouse.cur.y, mouse.start.x - mouse.cur.x);
 	if(sel == 4 && mouse.down)
 		eraseL(gridX(mouse.cur.x), gridY(mouse.cur.y));
+if(sel == 5 && mouse.down){
+    spawn.angle = Math.atan2(
+        mouse.start.y - mouse.cur.y,
+        mouse.start.x - mouse.cur.x
+    );
+}
+
 }
 
 ca.onmouseup = function(e){
@@ -232,6 +254,17 @@ function imp(){
 	var startText = text[1].split(" ");
 	var treesText = text[2].split(" ");
 	var arrowsText = text[3].split(" ");
+var spawnText = text[4];
+
+if (spawnText) {
+    var sp = spawnText.split("/");
+    if (sp.length === 2) {
+        var pos = sp[0].split(",");
+        spawn.x = parseInt(pos[0]) + Math.floor(width / scale / 2);
+        spawn.y = -parseInt(pos[1]) + Math.floor(height / scale / 2);
+        spawn.angle = parseInt(sp[1]) * Math.PI / 180;
+    }
+}
 
 	walls = [];
 	for(var i = 0; i < wallsText.length; i++){
@@ -334,8 +367,14 @@ function exp(){
 		text += -1 * (arrows[i].y - Math.floor(height / scale / 2)) + "/";
 		text += Math.floor(90 - arrows[i].angle * 180 / Math.PI) + " ";
 	}
-	text += "|";
-	text += "<br/>";
+text += "|";
+text += (spawn.x - Math.floor(width / scale / 2)) + ",";
+text += (-1 * (spawn.y - Math.floor(height / scale / 2))) + "/";
+text += Math.floor(spawn.angle * 180 / Math.PI);
+
+text += "|";
+text += "<br/>";
+
 	var win = window.open();
 	win.document.body.innerHTML = text;
 }
@@ -345,7 +384,7 @@ document.body.onkeydown = function(e){
 		//console.log(hist);
 		e.preventDefault();
 		var a = hist.splice(hist.length - 1, 1)[0];
-		var ar = [walls, start, trees, arrows, erase][a];
+var ar = [walls, start, trees, arrows, erase][a];
 		var del = ar.splice(ar.length - 1, 1)[0];
 		if(ar == erase){
 			del.list.splice(del.pos, 0, del.ob);
