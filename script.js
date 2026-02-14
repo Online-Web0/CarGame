@@ -939,15 +939,16 @@ function hostFlow() {
 
 var sg = makeDiv("startgame", "", "START GAME");
 
-sg.style.position = "absolute";
-sg.style.bottom = "2vmin";
+sg.style.position = "fixed";     // important
+sg.style.bottom = "20px";        // distance from bottom of screen
 sg.style.left = "50%";
 sg.style.transform = "translateX(-50%)";
-sg.style.width = "80vmin";
+sg.style.width = "420px";
 sg.style.textAlign = "center";
-sg.style.zIndex = "1000";   // <-- add this
+sg.style.zIndex = "99999";       // always above UI
 
-if (foreEl) foreEl.appendChild(sg);
+document.body.appendChild(sg);   // attach to body, not fore
+
 
 
 
