@@ -1035,19 +1035,32 @@ function startCountdown(done) {
   var t = 3;
   if (countdownEl) {
     countdownEl.style.fontSize = "40vmin";
-    countdownEl.innerHTML = String(t);
+   countdownEl.style.display = "block";
+countdownEl.innerHTML = String(t);
+
   }
 
   var iv = setInterval(function(){
     t--;
-    if (t <= 0) {
-      clearInterval(iv);
-      if (countdownEl) countdownEl.innerHTML = "";
-      gameSortaStarted = false;
-      if (done) done();
-      return;
+   if (t <= 0) {
+  clearInterval(iv);
+
+  if (countdownEl) {
+    countdownEl.innerHTML = "";
+    countdownEl.style.display = "none";
+  }
+
+  gameSortaStarted = false;
+  if (done) done();
+  return;
+}
+
     }
-    if (countdownEl) countdownEl.innerHTML = String(t);
+  if (countdownEl) {
+  countdownEl.style.display = "block";
+  countdownEl.innerHTML = String(t);
+}
+
   }, 1000);
 }
 
