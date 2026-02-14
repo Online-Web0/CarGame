@@ -1093,13 +1093,14 @@ function updateMePhysics(warp) {
   collideMeWithWalls();
   handleCheckpoints();
 
-  if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
-    me.data.x = spawnX;
-    me.data.y = spawnY;
-    me.data.xv = 0;
-    me.data.yv = 0;
-    me.data.dir = spawnDir;
-  }
+if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
+  me.data.x = spawnX;
+  me.data.y = spawnY;
+  me.data.xv = 0;
+  me.data.yv = 0;
+  me.data.dir = spawnDir + Math.PI;
+}
+
 
   me.model.position.x = me.data.x;
   me.model.position.z = me.data.y;
