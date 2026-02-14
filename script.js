@@ -1168,7 +1168,7 @@ function updateMePhysics(warp) {
 
   var brake = down ? 0.82 : 1.0;
 
-var ACCEL = SPEED * 2.0 * (nitro ? NITRO_MULT : 1);
+var ACCEL = SPEED * (nitro ? 5.0 : 2.0);
 var FRICTION = 0.965;
 var DRAG = 0.992;
 
@@ -1186,11 +1186,14 @@ me.data.yv *= DRAG * brake;
 
 
   var velMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-  if (velMag > MAX_SPEED) {
-    var s = MAX_SPEED / velMag;
-    me.data.xv *= s;
-    me.data.yv *= s;
-  }
+ var topSpeed = nitro ? MAX_SPEED * 1.6 : MAX_SPEED;
+
+if (velMag > topSpeed) {
+  var s = topSpeed / velMag;
+  me.data.xv *= s;
+  me.data.yv *= s;
+}
+
 
 me.data.x += me.data.xv * warp;
 me.data.y += me.data.yv * warp;
