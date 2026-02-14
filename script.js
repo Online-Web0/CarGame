@@ -89,13 +89,22 @@ function collideWithPlayers() {
     if (!p || !p.data) continue;
 
     var otherPos = vec2(p.data.x, p.data.y);
-    var delta = myPos.clone().sub(otherPos);
-    var dist = delta.length();
+   var dx = myPos.x - otherPos.x;
+var dy = myPos.y - otherPos.y;
 
-    var radius = 0.9;
+// car dimensions
+var halfWidth = 0.8;
+var halfLength = 1.3;
 
-    if (dist < radius * 2 && dist > 0.001) {
-      var n = delta.normalize();
+// ellipse collision
+var nx = dx / (halfWidth * 2);
+var ny = dy / (halfLength * 2);
+
+var dist = Math.sqrt(nx * nx + ny * ny);
+
+if (dist < 1 && dist > 0.001) {
+    var n = vec2(dx, dy).normalize();
+
 
       // --- separate cars ---
       var overlap = (radius * 2 - dist) * 1.2;
