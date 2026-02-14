@@ -280,18 +280,21 @@ function imp(){
 		});
 	}
 
-	arrows = [];
-	for(var i = 0; i < arrowsText.length; i++){
-		var t = arrowsText[i].split("/");
-		if(t.length < 2)
-			continue;
+arrows = [];
+for(var i = 0; i < arrowsText.length; i++){
+    var t = arrowsText[i].split("/");
+    if(t.length < 2)
+        continue;
 
-		arrows.push({
-			x: parseInt(t[0].split(",")[0]) + Math.floor(width / scale / 2),
-			y: -parseInt(t[0].split(",")[1]) + Math.floor(height / scale / 2),
-			angle: (90 - parseInt(t[1])) * Math.PI / 180
-		});
-	}
+    var coords = t[0].split(",");
+
+    arrows.push({
+        x: parseInt(coords[0]) + Math.floor(width / scale / 2),
+        y: -parseInt(coords[2]) + Math.floor(height / scale / 2),
+        angle: (90 - parseInt(t[1])) * Math.PI / 180
+    });
+}
+
 }
 
 function exp(){
