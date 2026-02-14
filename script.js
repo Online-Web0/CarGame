@@ -1,9 +1,5 @@
 // CarGame - rebuilt script.js (single file, no dependencies beyond three.js + firebase)
 // Works with the provided index.html / style.css structure in your project.
-//
-// PATCHED (ONLY WHAT YOU ASKED):
-// 1) Gear + toolbar disappear when the game starts.
-// 2) Car orientation fixed so it is not sideways (no rolling sideways).
 
 // ====== TUNING (your values kept) ======
 var SPEED = 0.004;
@@ -96,7 +92,6 @@ var color = "#ff3030";
 
 // ====== Utility ======
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
-
 function safeRemove(el) { if (!el) return; try { el.remove(); } catch (e) {} }
 
 function makeDiv(id, className, text) {
@@ -159,18 +154,35 @@ function setTrackCode(str) {
 // Expose for console
 window.setTrackCode = setTrackCode;
 
+// ====== UI visibility helpers (ONLY UI FIX CHANGES) ======
 function setDisplay(id, val) {
   var el = document.getElementById(id);
   if (el) el.style.display = val;
 }
 
 function hideLobbyUI() {
-  // hide name, color picker, start button, etc
+  // Hide the start screen controls (name + color slider + start button) once you click START
   setDisplay("name", "none");
-  setDisplay("colorpicker", "none");
+  setDisplay("colorpicker", "none"); // includes slider
   setDisplay("start", "none");
   setDisplay("divider", "none");
   setDisplay("mywebsitelink", "none");
+}
+
+function showLobbyUI() {
+  // Not used in normal flow, but safe to keep
+  setDisplay("name", "");
+  setDisplay("colorpicker", "");
+  setDisplay("start", "");
+  setDisplay("divider", "");
+  setDisplay("mywebsitelink", "");
+}
+
+function hideAllMenusForGameplay() {
+  // When the race actually starts, remove ALL menu UI layers except settings/toolbar + HUD
+  clearModeUI();
+  setDisplay("title", "none");
+  hideLobbyUI();
 }
 
 // ====== Engine init ======
@@ -191,7 +203,7 @@ function ensureEngine() {
   renderer.domElement.style.top = "0";
   renderer.domElement.style.left = "0";
   renderer.domElement.style.zIndex = "0";
-  renderer.domElement.style.pointerEvents = "none"; // keep UI clickable
+  renderer.domElement.style.pointerEvents = "none";
   document.body.appendChild(renderer.domElement);
 
   // Groups
@@ -202,7 +214,7 @@ function ensureEngine() {
   scene.add(cpGroup);
   scene.add(decoGroup);
 
-  // Ground
+  // Ground (resized after loading map)
   var gGeo = new THREE.PlaneGeometry(300, 300);
   gGeo.rotateX(-Math.PI / 2);
   var gMat = new THREE.MeshStandardMaterial({ color: 0x4aa85e, roughness: 1 });
@@ -256,11 +268,12 @@ function ensureEngine() {
     document.body.appendChild(lapEl);
   }
 
-  // label style if missing
+  // minimal label style if missing
   if (!document.getElementById("pLabelStyle")) {
     var st = document.createElement("style");
     st.id = "pLabelStyle";
-    st.textContent = ".pLabel{position:fixed;transform:translate(-50%,-100%);color:#fff;font-family:'Press Start 2P',monospace;font-size:12px;pointer-events:none;text-shadow:0 2px 0 rgba(0,0,0,.55);z-index:4;white-space:nowrap;}";
+    st.textContent =
+      ".pLabel{position:fixed;transform:translate(-50%,-100%);color:#fff;font-family:'Press Start 2P',monospace;font-size:12px;pointer-events:none;text-shadow:0 2px 0 rgba(0,0,0,.55);z-index:4;white-space:nowrap;}";
     document.head.appendChild(st);
   }
 
@@ -275,7 +288,7 @@ function onResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// ====== Map build ======
+// ====== Map build (compatible with /editor export) ======
 function clearGroup(g) {
   if (!g) return;
   while (g.children.length) g.remove(g.children[0]);
@@ -301,6 +314,7 @@ function buildMapFromTrackCode(track) {
   var checkPart = (parts[1] || "").trim();
   var treesPart = (parts[2] || "").trim();
 
+  // collect bounds
   var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
   function includePt(p) {
     minX = Math.min(minX, p.x);
@@ -309,6 +323,7 @@ function buildMapFromTrackCode(track) {
     maxY = Math.max(maxY, p.y);
   }
 
+  // Walls
   var wallTokens = wallsPart.split(/\s+/).filter(Boolean);
   for (var i = 0; i < wallTokens.length; i++) {
     var seg = parseSeg(wallTokens[i]);
@@ -317,6 +332,7 @@ function buildMapFromTrackCode(track) {
     addWall(seg.a, seg.b);
   }
 
+  // Checkpoints
   var cpTokens = checkPart.split(/\s+/).filter(Boolean);
   for (var j = 0; j < cpTokens.length; j++) {
     var cseg = parseSeg(cpTokens[j]);
@@ -325,6 +341,7 @@ function buildMapFromTrackCode(track) {
     addCheckpoint(cseg.a, cseg.b, j === 0);
   }
 
+  // Trees
   var treeTokens = treesPart.split(/\s+/).filter(Boolean);
   for (var t = 0; t < treeTokens.length; t++) {
     var tp = parseV2(treeTokens[t]);
@@ -333,6 +350,7 @@ function buildMapFromTrackCode(track) {
     addTree(tp.x, tp.y);
   }
 
+  // resize ground to fit map with padding
   if (minX < 1e8) {
     var pad = 20;
     var w = (maxX - minX) + pad;
@@ -373,7 +391,13 @@ function addWall(a2, b2) {
 
   mapGroup.add(mesh);
 
-  wallSegs.push({ a: a, b: b, dir: ab, len2: len2, mesh: mesh });
+  wallSegs.push({
+    a: a,
+    b: b,
+    dir: ab,
+    len2: len2,
+    mesh: mesh
+  });
 }
 
 function addCheckpoint(a2, b2, isStart) {
@@ -440,7 +464,7 @@ function computeSpawn() {
   spawnX = start.mid.x + forward.x * 3;
   spawnY = start.mid.y + forward.y * 3;
 
-  // physics convention: xv += sin(dir), yv += cos(dir)
+  // xv += sin(dir), yv += cos(dir)
   spawnDir = Math.atan2(forward.x, forward.y);
 }
 
@@ -474,6 +498,7 @@ function makeCar(hexColor) {
     return w;
   }
 
+  // front wheels are children[0] and [1]
   var frontLeft = wheelMesh();
   frontLeft.position.set(-0.75, 0.35, 0.85);
   car.add(frontLeft);
@@ -651,11 +676,17 @@ function showModeMenu() {
 
   clearModeUI();
 
+  // UI FIX: hide the original menu controls as soon as Start is pressed
+  hideLobbyUI();
+
+  // Validate name
   var nm = (nameEl && nameEl.value ? nameEl.value : "").trim();
   if (!nm && nameEl) nameEl.value = "Player";
 
-  if (titleEl) titleEl.innerHTML = "Choose Mode";
-  if (startEl) startEl.style.display = "none";
+  if (titleEl) {
+    titleEl.style.display = ""; // ensure visible for mode selection
+    titleEl.innerHTML = "Choose Mode";
+  }
 
   modeWrapEl = document.createElement("div");
   modeWrapEl.id = "modewrap";
@@ -673,18 +704,6 @@ function showModeMenu() {
   mkButton("HOST", 30, function () { hostFlow(); });
   mkButton("JOIN", 55, function () { joinFlow(); });
   mkButton("SOLO", 80, function () { soloFlow(); });
-}
-
-// PATCH: robust hiding for gameplay (includes gear/toolbar)
-function hideAllMenusForGameplay() {
-  clearModeUI();
-
-  setDisplay("title", "none");
-  hideLobbyUI();
-
-  // Hide gear + toolbar once the game starts
-  setDisplay("settings", "none");
-  setDisplay("toolbar", "none");
 }
 
 // ====== Toolbar tools ======
@@ -753,7 +772,7 @@ function detachRoomListeners() {
   try {
     if (playersRef) playersRef.off();
     if (startRef) startRef.off();
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function clearPlayers() {
@@ -843,10 +862,7 @@ function createLocalPlayerFirebase() {
   var hex = parseInt(color.replace("#", "0x"), 16);
   var model = makeCar(hex);
   model.position.set(data.x, 0, data.y);
-
-  // PATCH: orientation fix (no sideways/rolling)
-  model.rotation.set(0, data.dir + Math.PI, 0);
-
+  model.rotation.y = data.dir;
   scene.add(model);
 
   var label = makeLabel(nm);
@@ -873,10 +889,7 @@ function upsertPlayer(key, data) {
     var hex = parseInt(((data.color || "#ff3030").replace("#", "0x")), 16);
     var model = makeCar(hex);
     model.position.set(data.x || 0, 0, data.y || 0);
-
-    // PATCH: orientation fix for remotes
-    model.rotation.set(0, (data.dir || 0) + Math.PI, 0);
-
+    model.rotation.y = data.dir || 0;
     scene.add(model);
 
     var label = makeLabel(data.name || "Player");
@@ -980,10 +993,7 @@ function soloFlow() {
   var hex = parseInt(color.replace("#", "0x"), 16);
   var model = makeCar(hex);
   model.position.set(data.x, 0, data.y);
-
-  // PATCH: orientation fix
-  model.rotation.set(0, data.dir + Math.PI, 0);
-
+  model.rotation.y = data.dir;
   scene.add(model);
 
   var label = makeLabel(nm);
@@ -999,12 +1009,11 @@ function startGame() {
 
   gameStarted = true;
 
-  // PATCH: hides everything (including gear/toolbar)
+  // UI FIX: remove all menu layers once the game starts
   hideAllMenusForGameplay();
-
   showOverlayMsg("");
 
-  startCountdown(function () {});
+  startCountdown(function () { });
 }
 
 function startCountdown(done) {
@@ -1093,11 +1102,8 @@ function updateMePhysics(warp) {
 
   me.model.position.x = me.data.x;
   me.model.position.z = me.data.y;
+  me.model.rotation.y = me.data.dir;
 
-  // PATCH: orientation fix (keeps car upright, not sideways)
-  me.model.rotation.set(0, me.data.dir + Math.PI, 0);
-
-  // wheel visuals
   if (me.model.children[0]) me.model.children[0].rotation.z = Math.PI / 2 - me.data.steer;
   if (me.model.children[1]) me.model.children[1].rotation.z = Math.PI / 2 - me.data.steer;
 }
@@ -1192,9 +1198,8 @@ function updateRemoteVisuals(warp) {
     p.model.position.z += (ty - p.model.position.z) * clamp(0.18 * warp, 0, 1);
 
     var cur = p.model.rotation.y;
-    var targetY = tdir + Math.PI; // PATCH orientation for remotes
-    var diff = ((targetY - cur + Math.PI) % (2 * Math.PI)) - Math.PI;
-    p.model.rotation.set(0, cur + diff * clamp(0.25 * warp, 0, 1), 0);
+    var diff = ((tdir - cur + Math.PI) % (2 * Math.PI)) - Math.PI;
+    p.model.rotation.y = cur + diff * clamp(0.25 * warp, 0, 1);
   }
 }
 
@@ -1257,6 +1262,7 @@ function renderLoop(ts) {
   }
 
   updateLabels();
+
   renderer.render(scene, camera);
   MODS();
 }
@@ -1264,7 +1270,6 @@ function renderLoop(ts) {
 // ====== Init ======
 function init() {
   ensureEngine();
-
   if (foreEl) foreEl.style.pointerEvents = "auto";
 
   setupToolbarOnce();
@@ -1285,16 +1290,16 @@ if (document.readyState === "loading") {
   init();
 }
 
-// ====== Compatibility with existing HTML inline onclick handlers ======
+// ====== Compatibility with your existing HTML inline onclick handlers ======
 window.menu2 = showModeMenu;
 window.host = hostFlow;
 window.joinGame = joinFlow;
-window.codeCheck = function () {};
+window.codeCheck = function () { };
 window.updateColor = function (x01) { setSliderFrom01(x01); };
 
 // Clean up firebase presence on close
 window.addEventListener("beforeunload", function () {
   try {
     if (me && me.ref) me.ref.remove();
-  } catch (e) {}
+  } catch (e) { }
 });
