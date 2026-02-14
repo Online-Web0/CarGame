@@ -177,7 +177,7 @@ function segClosestPoint(p, a, b) {
   return a.clone().add(ab.multiplyScalar(t));
 }
 
-var MIRROR_X = true; // mirror short-ways (left↔right)
+var MIRROR_X = false; // mirror short-ways (left↔right)
 
 function parseV2(tok) {
   var parts = tok.split(",");
@@ -969,7 +969,7 @@ function createLocalPlayerFirebase() {
 
   var hex = parseInt(color.replace("#", "0x"), 16);
   var model = makeCar(hex);
-  model.position.set(data.x, 0, data.y);
+  me.model.position.z = me.data.y;
   model.rotation.y = data.dir;
   scene.add(model);
 
