@@ -89,12 +89,14 @@ function drawBG(){
 }
 
 function drawCarArrow(){
+	// draw the "car" at the CENTER of the view (world camX, camY),
+	// sized in WORLD units so it scales with zoom automatically.
 	const carWorldX = camX;
 	const carWorldY = camY;
 
-	const carLen = 1.2;
-	const carWid = 0.7;
-	const ang = -Math.PI / 2;
+	const carLen = 1.2;   // forward length in grid units
+	const carWid = 0.7;   // side size in grid units
+	const ang = -Math.PI / 2; // points "up" on screen
 
 	const tip = { x: carWorldX + Math.cos(ang) * carLen, y: carWorldY + Math.sin(ang) * carLen };
 	const left = { x: carWorldX + Math.cos(ang + Math.PI * 0.75) * carWid, y: carWorldY + Math.sin(ang + Math.PI * 0.75) * carWid };
@@ -119,9 +121,11 @@ function update(){
 	resizeCanvas();
 	drawBG();
 
+	// draw objects in WORLD space by converting each point to screen space
 	c.lineCap = "round";
 	c.lineWidth = 2;
 
+	// walls
 	c.strokeStyle = "#f48342";
 	c.beginPath();
 	for(var i = 0; i < walls.length; i++){
@@ -132,6 +136,7 @@ function update(){
 	}
 	c.stroke();
 
+	// start/check lines (first blue, rest red)
 	c.strokeStyle = "#428ff4";
 	c.beginPath();
 	for(var i = 0; i < start.length && i < 1; i++){
@@ -152,14 +157,16 @@ function update(){
 	}
 	c.stroke();
 
+	// trees
 	c.fillStyle = "#08cc3c";
 	for(var i = 0; i < trees.length; i++){
 		let p = worldToScreen(trees[i].x, trees[i].y);
 		c.beginPath();
-		c.arc(p.x, p.y, Math.max(2, zoom * 0.15), 0, 2 * Math.PI);
+		c.arc(p.x, p.y, Math.max(2, zoom * 0.15), 0, 2 * Math.PI); // scales a bit with zoom
 		c.fill();
 	}
 
+	// arrows tool (your red little direction lines)
 	c.strokeStyle = "#f00";
 	c.beginPath();
 	for(var i = 0; i < arrows.length; i++){
@@ -173,17 +180,21 @@ function update(){
 	}
 	c.stroke();
 
+	// car arrow on top
 	drawCarArrow();
 }
 update();
 
+// ===== UI selection =====
 function select(n){
 	sel = n;
 	for(var i = 0; i < s.children.length - 1; i++)
 		s.children[i].className = "button" + (i == n ? " selected" : "");
 }
 
+// ===== Editing =====
 ca.onmousedown = function(e){
+	// Middle mouse or Shift+Left = pan
 	if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
 		draggingView = true;
 		lastX = e.clientX;
@@ -253,9 +264,11 @@ ca.onmouseup = function(e){
 	hist.push(sel);
 };
 
+// prevent browser scroll on wheel over canvas
 ca.addEventListener("wheel", e => {
 	e.preventDefault();
 
+	// zoom around mouse pointer (keeps what you're pointing at stable)
 	const beforeX = screenToWorldX(e.clientX);
 	const beforeY = screenToWorldY(e.clientY);
 
@@ -269,6 +282,7 @@ ca.addEventListener("wheel", e => {
 	camY += (beforeY - afterY);
 }, { passive:false });
 
+// ===== Pan =====
 let draggingView = false;
 let lastX = 0;
 let lastY = 0;
@@ -285,25 +299,148 @@ window.addEventListener("mousemove", e => {
 	lastY = e.clientY;
 });
 
+// ===== Import/Export (kept as-is, but adapted to world coords) =====
+function imp(){
+	var text = prompt("Track data?").trim().split("|");
+	if(!text || text.length < 4) return;
+
+	var wallsText = text[0].split(" ");
+	var startText = text[1].split(" ");
+	var treesText = text[2].split(" ");
+	var arrowsText = text[3].split(" ");
+
+	walls = [];
+	for(var i = 0; i < wallsText.length; i++){
+		var t = wallsText[i].split("/");
+		if(t.length < 2) continue;
+
+		walls.push({
+			start:{ x: parseInt(t[0].split(",")[0]), y: -parseInt(t[0].split(",")[1]) },
+			end:{ x: parseInt(t[1].split(",")[0]), y: -parseInt(t[1].split(",")[1]) }
+		});
+	}
+
+	start = [];
+	for(var i = 0; i < startText.length; i++){
+		var t = startText[i].split("/");
+		if(t.length < 2) continue;
+
+		start.push({
+			start:{ x: parseInt(t[0].split(",")[0]), y: -parseInt(t[0].split(",")[1]) },
+			end:{ x: parseInt(t[1].split(",")[0]), y: -parseInt(t[1].split(",")[1]) }
+		});
+	}
+
+	trees = [];
+	for(var i = 0; i < treesText.length; i++){
+		if(treesText[i].trim().length == 0) continue;
+		trees.push({ x: parseInt(treesText[i].split(",")[0]), y: -parseInt(treesText[i].split(",")[1]) });
+	}
+
+	arrows = [];
+	for(var i = 0; i < arrowsText.length; i++){
+		var t = arrowsText[i].split("/");
+		if(t.length < 2) continue;
+
+		arrows.push({
+			x: parseInt(t[0].split(",")[0]),
+			y: -parseInt(t[0].split(",")[2]),
+			angle: (90 - parseInt(t[1])) * Math.PI / 180
+		});
+	}
+}
+
+function exp(){
+	var text = "";
+
+	for(var i = 0; i < walls.length; i++){
+		text += walls[i].start.x + ",";
+		text += -1 * (walls[i].start.y) + "/";
+		text += walls[i].end.x + ",";
+		text += -1 * (walls[i].end.y) + " ";
+	}
+	text += "|";
+
+	for(var i = 0; i < start.length; i++){
+		text += start[i].start.x + ",";
+		text += -1 * (start[i].start.y) + "/";
+		text += start[i].end.x + ",";
+		text += -1 * (start[i].end.y) + " ";
+	}
+	text += "|";
+
+	for(var i = 0; i < trees.length; i++){
+		text += trees[i].x + ",";
+		text += -1 * (trees[i].y) + " ";
+	}
+	text += "|";
+
+	for(var i = 0; i < arrows.length; i++){
+		text += arrows[i].x + ",3,";
+		text += -1 * (arrows[i].y) + "/";
+		text += Math.floor(90 - arrows[i].angle * 180 / Math.PI) + " ";
+	}
+	text += "|";
+	text += "<br/>";
+
+	var win = window.open();
+	win.document.body.innerHTML = text;
+}
+
+// ===== Undo / Erase =====
+document.body.onkeydown = function(e){
+	if(e.keyCode == 90 && (e.ctrlKey || e.metaKey)){
+		e.preventDefault();
+		var a = hist.splice(hist.length - 1, 1)[0];
+		var ar = [walls, start, trees, arrows, erase][a];
+		var del = ar.splice(ar.length - 1, 1)[0];
+		if(ar == erase){
+			del.list.splice(del.pos, 0, del.ob);
+		}
+	}
+};
+
 function eraseL(x, y){
-	for(var i = 0; i < walls.length; i++)
+	for(var i = 0; i < walls.length; i++){
 		if(Math.hypot(walls[i].start.x - x, walls[i].start.y - y) < 1 || Math.hypot(walls[i].end.x - x, walls[i].end.y - y) < 1){
 			hist.push(sel);
-			erase.push({ list: walls, ob: walls.splice(i, 1)[0], pos: i });
+			erase.push({ list:walls, ob:walls.splice(i, 1)[0], pos:i });
 		}
-	for(var i = 0; i < start.length; i++)
+	}
+	for(var i = 0; i < start.length; i++){
 		if(Math.hypot(start[i].start.x - x, start[i].start.y - y) < 1 || Math.hypot(start[i].end.x - x, start[i].end.y - y) < 1){
 			hist.push(sel);
-			erase.push({ list: start, ob: start.splice(i, 1)[0], pos: i });
+			erase.push({ list:start, ob:start.splice(i, 1)[0], pos:i });
 		}
-	for(var i = 0; i < trees.length; i++)
+	}
+	for(var i = 0; i < trees.length; i++){
 		if(Math.hypot(trees[i].x - x, trees[i].y - y) < 1){
 			hist.push(sel);
-			erase.push({ list: trees, ob: trees.splice(i, 1)[0], pos: i });
+			erase.push({ list:trees, ob:trees.splice(i, 1)[0], pos:i });
 		}
-	for(var i = 0; i < arrows.length; i++)
+	}
+	for(var i = 0; i < arrows.length; i++){
 		if(Math.hypot(arrows[i].x - x, arrows[i].y - y) < 1){
 			hist.push(sel);
-			erase.push({ list: arrows, ob: arrows.splice(i, 1)[0], pos: i });
+			erase.push({ list:arrows, ob:arrows.splice(i, 1)[0], pos:i });
 		}
+	}
+}
+
+// ===== Misc =====
+function help(){
+	document.getElementById("help").parentElement.style.transform = "none";
+}
+
+function dedupTrees(){
+	var poss = [];
+	for(var i = 0; i < trees.length; i++){
+		for(var n = 0; n < poss.length; n++){
+			if(poss[n].x == trees[i].x && poss[n].y == trees[i].y){
+				trees.splice(i--, 1);
+				break;
+			}
+		}
+		poss.push(trees[i]);
+	}
 }
