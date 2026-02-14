@@ -177,6 +177,8 @@ function segClosestPoint(p, a, b) {
   return a.clone().add(ab.multiplyScalar(t));
 }
 
+var MIRROR_X = true; // mirror short-ways (left↔right)
+
 function parseV2(tok) {
   var parts = tok.split(",");
   if (parts.length !== 2) return null;
@@ -185,8 +187,14 @@ function parseV2(tok) {
   var y = parseFloat(parts[1]);
   if (!isFinite(x) || !isFinite(y)) return null;
 
-  return vec2(-x, -y);
+  // editor -> game:
+  // - keep your existing "flip Y into Z" (-y)
+  // - add short-way mirror on X (-x)
+  if (MIRROR_X) x = -x;
+
+  return vec2(x, -y);
 }
+
 
 
 
