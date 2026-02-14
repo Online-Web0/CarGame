@@ -190,7 +190,13 @@ canvas {
 	transform: scaleY(0);
 	transition: transform .5s;
 	transform-origin: bottom center;
+
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-end;
+	align-items: center;
 }
+
 
 
 #toolbar.sel{
