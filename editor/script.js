@@ -61,52 +61,41 @@ function update(){
 	c.lineTo(width / 2 - 5, height / 2 + 5 - scale / 2);
 	c.lineTo(width / 2 + 5, height / 2 + 5 - scale / 2);
 	c.fill();
-	c.translate(width / 2, height / 2);
-c.scale(1, -1);
-
+	c.translate(offset.x, offset.y);
 	c.lineCap = "round";
 	c.lineWidth = 2;
 	c.strokeStyle="#f48342";
 	c.beginPath();
 	for(var i = 0; i < walls.length; i++){
-	c.moveTo(scale * (walls[i].start.x - width/(2*scale)), scale * (walls[i].start.y - height/(2*scale)));
-c.lineTo(scale * (walls[i].end.x - width/(2*scale)), scale * (walls[i].end.y - height/(2*scale)));
-
-
+		c.moveTo(scale * walls[i].start.x, scale * walls[i].start.y);
+		c.lineTo(scale * walls[i].end.x, scale * walls[i].end.y);
 	}
 	c.stroke();
 	c.strokeStyle="#428ff4";
 	c.beginPath();
 	for(var i = 0; i < start.length && i < 1; i++){
-		c.moveTo(scale * start[i].start.x, height - scale * start[i].start.y);
-c.lineTo(scale * start[i].end.x, height - scale * start[i].end.y);
-
+		c.moveTo(scale * start[i].start.x, scale * start[i].start.y);
+		c.lineTo(scale * start[i].end.x, scale * start[i].end.y);
 	}
 	c.stroke();
 	c.strokeStyle="#f00";
 	c.beginPath();
 	for(var i = 1; i < start.length; i++){
-	c.moveTo(scale * start[i].start.x, height - scale * start[i].start.y);
-c.lineTo(scale * start[i].end.x, height - scale * start[i].end.y);
-
+		c.moveTo(scale * start[i].start.x, scale * start[i].start.y);
+		c.lineTo(scale * start[i].end.x, scale * start[i].end.y);
 	}
 	c.stroke();
 	c.fillStyle="#08cc3c";
 	for(var i = 0; i < trees.length; i++){
 		c.beginPath();
-		c.arc(scale * trees[i].x, height - scale * trees[i].y, 5, 0, 2 * Math.PI);
-
+		c.arc(scale * trees[i].x, scale * trees[i].y, 5, 0, 2 * Math.PI);
 		c.fill();
 	}
 	c.fillStyle="#f00";
 	c.beginPath();
 	for(var i = 0; i < arrows.length; i++){
-	c.moveTo(scale * arrows[i].x, height - scale * arrows[i].y);
-c.lineTo(
-  scale * arrows[i].x - scale * Math.cos(arrows[i].angle) / 2,
-  height - (scale * arrows[i].y - scale * Math.sin(arrows[i].angle) / 2)
-);
-
+		c.moveTo(scale * arrows[i].x, scale * arrows[i].y);
+		c.lineTo(scale * arrows[i].x - scale * Math.cos(arrows[i].angle) / 2, scale * arrows[i].y - scale * Math.sin(arrows[i].angle) / 2);
 	}
 	c.stroke();
 	c.translate(-offset.x, -offset.y);
@@ -238,7 +227,7 @@ function imp(){
 		walls.push({
 			start: {
 				x: parseInt(t[0].split(",")[0]) + Math.floor(width / scale / 2),
-				y: parseInt(t[0].split(",")[1]) + Math.floor(height / scale / 2)
+				y: -parseInt(t[0].split(",")[1]) + Math.floor(height / scale / 2)
 			},
 			end: {
 				x: parseInt(t[1].split(",")[0]) + Math.floor(width / scale / 2),
@@ -272,7 +261,7 @@ function imp(){
 
 		trees.push({
 			x: parseInt(treesText[i].split(",")[0]) + Math.floor(width / scale / 2),
-			y: parseInt(t[0].split(",")[2]) + Math.floor(height / scale / 2)
+			y: -parseInt(treesText[i].split(",")[1]) + Math.floor(height / scale / 2)
 		});
 	}
 
