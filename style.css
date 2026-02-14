@@ -145,7 +145,7 @@ canvas {
 	        transform: translate(-4.5vmin, -2vmin) scale(1.2);
 }
 #settings{
-	height: 20vmin;
+	height: 30vmin;
 	width: 20vmin;
 	background-color: #6eb0ea;
 	position: absolute;
