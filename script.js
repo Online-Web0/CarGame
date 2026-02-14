@@ -79,7 +79,7 @@ var playerCollisionEnabled = false;
 function collideWithPlayers() {
   if (!playerCollisionEnabled || !me) return;
 
-  var myPos = vec2(me.data.x, me.data.y);
+  var radius = 0.95;
 
   for (var k in players) {
     if (!players.hasOwnProperty(k)) continue;
@@ -88,47 +88,41 @@ function collideWithPlayers() {
     var p = players[k];
     if (!p || !p.data) continue;
 
-    var otherPos = vec2(p.data.x, p.data.y);
-   var dx = myPos.x - otherPos.x;
-var dy = myPos.y - otherPos.y;
+    var dx = me.data.x - p.data.x;
+    var dy = me.data.y - p.data.y;
 
-// car dimensions
-var halfWidth = 0.8;
-var halfLength = 1.3;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist === 0) continue;
 
-// ellipse collision
-var nx = dx / (halfWidth * 2);
-var ny = dy / (halfLength * 2);
+    var minDist = radius * 2;
 
-var dist = Math.sqrt(nx * nx + ny * ny);
+    if (dist < minDist) {
+      var nx = dx / dist;
+      var ny = dy / dist;
 
-if (dist < 1 && dist > 0.001) {
-    var n = vec2(dx, dy).normalize();
+      var overlap = minDist - dist;
 
+      // separate cars
+      me.data.x += nx * overlap * 0.5;
+      me.data.y += ny * overlap * 0.5;
 
-      // --- separate cars ---
-      var overlap = (radius * 2 - dist) * 1.2;
+      p.data.x -= nx * overlap * 0.5;
+      p.data.y -= ny * overlap * 0.5;
 
-      me.data.x += n.x * overlap;
-      me.data.y += n.y * overlap;
+      // bounce velocities
+      var rvx = me.data.xv - (p.data.xv || 0);
+      var rvy = me.data.yv - (p.data.yv || 0);
 
-      p.data.x -= n.x * overlap;
-      p.data.y -= n.y * overlap;
+      var impulse = rvx * nx + rvy * ny;
 
-      // --- bounce velocities ---
-      var myVel = vec2(me.data.xv, me.data.yv);
-      var otherVel = vec2(p.data.xv || 0, p.data.yv || 0);
+      if (impulse < 0) {
+        var bounce = 1.1;
 
-      var relVel = myVel.clone().sub(otherVel);
+        me.data.xv -= nx * impulse * bounce;
+        me.data.yv -= ny * impulse * bounce;
 
-      if (relVel.dot(n) < 0) {
-        var impulse = relVel.dot(n) * 1.6;
-
-        me.data.xv -= n.x * impulse;
-        me.data.yv -= n.y * impulse;
-
-        p.data.xv += n.x * impulse;
-        p.data.yv += n.y * impulse;
+        p.data.xv += nx * impulse * bounce;
+        p.data.yv += ny * impulse * bounce;
       }
     }
   }
