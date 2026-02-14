@@ -453,6 +453,7 @@ function computeSpawn() {
     spawnX = 0; spawnY = 0; spawnDir = 0;
     return;
   }
+
   var start = cpSegs[0];
   var forward = start.normal.clone();
 
@@ -465,10 +466,9 @@ function computeSpawn() {
   spawnX = start.mid.x + forward.x * 3;
   spawnY = start.mid.y + forward.y * 3;
 
-  // xv += sin(dir), yv += cos(dir)
-spawnDir = Math.atan2(forward.y, forward.x) - Math.PI / 2;
-
+  spawnDir = Math.atan2(forward.x, forward.y);
 }
+
 
 // ====== Cars + labels ======
 function makeCar(hexColor) {
