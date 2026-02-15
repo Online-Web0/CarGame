@@ -525,33 +525,54 @@ function computeSpawn() {
 
 // ====== Cars + labels ======
 function makeCar(hexColor) {
-  var car = new THREE.Object3D();
+  var car = new THREE.Group();
 
-  var bodyGeo = new THREE.BoxGeometry(1.6, 0.6, 2.6);
-  var bodyMat = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.7, metalness: 0.05 });
-  var body = new THREE.Mesh(bodyGeo, bodyMat);
+  // ===== Body =====
+  var body = new THREE.Mesh(
+    new THREE.BoxGeometry(1.8, 0.45, 3.4),
+    new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.6 })
+  );
+  body.position.y = 0.55;
   body.castShadow = true;
-  body.receiveShadow = true;
-  body.position.y = 0.6;
   car.add(body);
 
-  var cabinGeo = new THREE.BoxGeometry(1.2, 0.5, 1.2);
-  var cabinMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
-  var cabin = new THREE.Mesh(cabinGeo, cabinMat);
-  cabin.castShadow = true;
-  cabin.receiveShadow = true;
-  cabin.position.set(0, 0.95, -0.2);
+  // ===== Hood =====
+  var hood = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6, 0.35, 1.4),
+    new THREE.MeshStandardMaterial({ color: hexColor })
+  );
+  hood.position.set(0, 0.6, 1.1);
+  car.add(hood);
+
+  // ===== Cabin =====
+  var cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, 0.5, 1.4),
+    new THREE.MeshStandardMaterial({ color: 0x111111 })
+  );
+  cabin.position.set(0, 0.9, -0.3);
   car.add(cabin);
 
-  function wheelMesh() {
-    var g = new THREE.CylinderGeometry(0.32, 0.32, 0.24, 16);
-    var m = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1 });
-    var w = new THREE.Mesh(g, m);
+  // ===== Wheels =====
+  function wheel(x, z) {
+    var w = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.34, 0.34, 0.28, 16),
+      new THREE.MeshStandardMaterial({ color: 0x0a0a0a })
+    );
     w.rotation.z = Math.PI / 2;
+    w.position.set(x, 0.35, z);
     w.castShadow = true;
-    w.receiveShadow = true;
+    car.add(w);
     return w;
   }
+
+  var frontLeft  = wheel(-0.9, 1.1);
+  var frontRight = wheel( 0.9, 1.1);
+  var backLeft   = wheel(-0.9, -1.1);
+  var backRight  = wheel( 0.9, -1.1);
+
+  return car;
+}
+
 
   var frontLeft = wheelMesh();
   frontLeft.position.set(-0.75, 0.35, 0.85);
