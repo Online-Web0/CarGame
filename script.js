@@ -20,7 +20,7 @@
   var mapscale = 500;
   var VR = false;
   var BOUNCE_CORRECT = 0.01;
-  var WALL_SIZE = 1.2;       // used as wall "thickness" margin for collision
+  var WALL_SIZE = 0.6 / 2;       // used as wall "thickness" margin for collision
   var MOUNTAIN_DIST = 2500;
   var OOB_DIST = 2000;
   var LAPS = 3;
