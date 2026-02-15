@@ -1,5 +1,4 @@
-// CarGame - rebuilt script.js (single file, no dependencies beyond three.js + firebase)
-// Works with the provided index.html / style.css structure in your project.
+// CarGame - script.js (single file, no dependencies beyond three.js + firebase)
 
 // ====== TUNING (your values kept) ======
 var SPEED = .016;
@@ -14,6 +13,7 @@ var MOUNTAIN_DIST = 2500;
 var OOB_DIST = 2000;
 var LAPS = 3;
 var NITRO_MULT = 2.2;
+
 var nitro = false;
 var NITRO_MAX = 100;
 var nitroFuel = NITRO_MAX;
@@ -32,7 +32,6 @@ function MODS() {}
 // ====== Firebase connection ======
 // NOTE: This assumes firebase scripts are already loaded in index.html
 var database = null;
-var authReady = false;
 try {
   var firebaseConfig = {
     apiKey: "AIzaSyAbvjrx9Nvu2_xRFTN-AEN8dJgRUDdb410",
@@ -49,7 +48,6 @@ try {
   }
   if (typeof firebase !== "undefined") {
     database = firebase.database();
-    firebase.auth().onAuthStateChanged(function (u) { authReady = !!u; });
     firebase.auth().signInAnonymously().catch(function (e) {
       console.warn("Firebase auth failed (solo still works):", e);
     });
@@ -65,7 +63,7 @@ var ground;
 
 // ====== Map physics data ======
 var wallSegs = [];  // {a:V2,b:V2,dir:V2,len2:number,mesh:Mesh}
-var cpSegs = [];    // [0]=start, [1]=checkpoint {a,b,dir,len2,normal:V2,mesh}
+var cpSegs = [];    // checkpoints; [0]=start line
 var spawnX = 0, spawnY = 0, spawnDir = 0;
 
 // ====== Multiplayer/game state ======
@@ -82,57 +80,6 @@ var me = null;
 var gameStarted = false;      // true after room start signal (or solo start)
 var gameSortaStarted = false; // countdown freeze
 var playerCollisionEnabled = false;
-
-function collideWithPlayers() {
-  if (!playerCollisionEnabled || !me) return;
-
-  var pPos = vec2(me.data.x, me.data.y);
-  var pVel = vec2(me.data.xv, me.data.yv);
-
-  var radius = 1.35;
-
-  for (var k in players) {
-    if (!players.hasOwnProperty(k)) continue;
-    if (k === meKey) continue;
-
-    var p = players[k];
-    if (!p || !p.data) continue;
-
-    var oPos = vec2(p.data.x, p.data.y);
-    var oVel = vec2(p.data.xv || 0, p.data.yv || 0);
-
-    var delta = pPos.clone().sub(oPos);
-    var dist = delta.length();
-    if (dist === 0) continue;
-
-    if (dist < radius * 2) {
-      var n = delta.normalize();
-
-      // --- separate cars (like wall correction) ---
-      var overlap = radius * 2 - dist;
-      pPos.add(n.clone().multiplyScalar(overlap));
-
-      // --- reflect MY velocity like a wall ---
-      if (pVel.dot(n) < 0) {
-        pVel = reflect2(pVel, n);
-        pVel.multiplyScalar(BOUNCE);
-      }
-
-      // --- push the other car slightly ---
-      p.data.x -= n.x * overlap * 0.5;
-      p.data.y -= n.y * overlap * 0.5;
-
-      p.data.xv -= n.x * 0.12;
-      p.data.yv -= n.y * 0.12;
-    }
-  }
-
-  me.data.x = pPos.x;
-  me.data.y = pPos.y;
-  me.data.xv = pVel.x;
-  me.data.yv = pVel.y;
-}
-
 
 // ====== Input state ======
 var left = false;
@@ -179,6 +126,8 @@ function segClosestPoint(p, a, b) {
 
 var MIRROR_X = false; // mirror short-ways (left↔right)
 
+// Editor token "x,y" -> game Vector2(x, z)
+// Game uses x = east/west, y = north/south (stored as .y then used as model.position.z)
 function parseV2(tok) {
   var parts = tok.split(",");
   if (parts.length !== 2) return null;
@@ -187,16 +136,9 @@ function parseV2(tok) {
   var y = parseFloat(parts[1]);
   if (!isFinite(x) || !isFinite(y)) return null;
 
-  // editor -> game:
-  // - keep your existing "flip Y into Z" (-y)
-  // - add short-way mirror on X (-x)
   if (MIRROR_X) x = -x;
-
-  return vec2(x, -y);
+  return vec2(x, -y); // flip editor Y into game axis
 }
-
-
-
 
 function parseSeg(tok) {
   // "x1,y1/x2,y2"
@@ -220,54 +162,36 @@ function setTrackCode(str) {
   el.textContent = (str || "").trim();
   buildMapFromTrackCode(getTrackCode());
 }
-
-// Expose for console
 window.setTrackCode = setTrackCode;
 
-// ====== UI visibility helpers (ONLY UI FIX CHANGES) ======
+// ====== UI visibility helpers ======
 function setDisplay(id, val) {
   var el = document.getElementById(id);
   if (el) el.style.display = val;
 }
 
 function hideLobbyUI() {
-  // Hide the start screen controls (name + color slider + start button) once you click START
   setDisplay("name", "none");
-  setDisplay("colorpicker", "none"); // includes slider
+  setDisplay("colorpicker", "none");
   setDisplay("start", "none");
   setDisplay("divider", "none");
   setDisplay("mywebsitelink", "none");
 }
 
-function showLobbyUI() {
-  // Not used in normal flow, but safe to keep
-  setDisplay("name", "");
-  setDisplay("colorpicker", "");
-  setDisplay("start", "");
-  setDisplay("divider", "");
-  setDisplay("mywebsitelink", "");
-}
-
 function hideAllMenusForGameplay() {
   clearModeUI();
 
-  // remove join / host UI
   safeRemove(document.getElementById("incode"));
   safeRemove(document.getElementById("startgame"));
-
-
   safeRemove(document.getElementById("code"));
   safeRemove(document.getElementById("modewrap"));
 
   setDisplay("title", "none");
   hideLobbyUI();
 
-  // keep fore container but prevent it blocking clicks
   if (foreEl) foreEl.style.pointerEvents = "none";
-
   if (settingsEl) settingsEl.style.display = "none";
 }
-
 
 // ====== Engine init ======
 function ensureEngine() {
@@ -282,7 +206,6 @@ function ensureEngine() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  // Put canvas behind UI
   renderer.domElement.style.position = "fixed";
   renderer.domElement.style.top = "0";
   renderer.domElement.style.left = "0";
@@ -290,7 +213,6 @@ function ensureEngine() {
   renderer.domElement.style.pointerEvents = "none";
   document.body.appendChild(renderer.domElement);
 
-  // Groups
   mapGroup = new THREE.Group();
   cpGroup = new THREE.Group();
   decoGroup = new THREE.Group();
@@ -306,7 +228,6 @@ function ensureEngine() {
   ground.receiveShadow = true;
   scene.add(ground);
 
-  // Camera + lights
   camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 1, 2000);
   camera.position.set(0, CAM_HEIGHT, 10);
   scene.add(camera);
@@ -328,7 +249,6 @@ function ensureEngine() {
   scene.add(new THREE.AmbientLight(0xffffff, 0.35));
   scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.55));
 
-  // UI elements
   foreEl = document.getElementById("fore");
   titleEl = document.getElementById("title");
   startEl = document.getElementById("start");
@@ -351,30 +271,30 @@ function ensureEngine() {
     lapEl = makeDiv("lap", "", "");
     document.body.appendChild(lapEl);
   }
-if (!document.getElementById("nitrobar")) {
-  var nb = makeDiv("nitrobar", "", "");
-  nb.style.position = "fixed";
-  nb.style.bottom = "18px";
-  nb.style.left = "50%";
-  nb.style.transform = "translateX(-50%)";
-  nb.style.width = "260px";
-  nb.style.height = "14px";
-  nb.style.background = "rgba(0,0,0,.45)";
-  nb.style.border = "2px solid white";
-  nb.style.borderRadius = "6px";
-  nb.style.zIndex = "5";
 
-  var fill = makeDiv("nitrofill", "", "");
-  fill.style.height = "100%";
-  fill.style.width = "100%";
-  fill.style.background = "#00c8ff";
-  fill.style.transition = "width .08s linear";
+  if (!document.getElementById("nitrobar")) {
+    var nb = makeDiv("nitrobar", "", "");
+    nb.style.position = "fixed";
+    nb.style.bottom = "18px";
+    nb.style.left = "50%";
+    nb.style.transform = "translateX(-50%)";
+    nb.style.width = "260px";
+    nb.style.height = "14px";
+    nb.style.background = "rgba(0,0,0,.45)";
+    nb.style.border = "2px solid white";
+    nb.style.borderRadius = "6px";
+    nb.style.zIndex = "5";
 
-  nb.appendChild(fill);
-  document.body.appendChild(nb);
-}
+    var fill = makeDiv("nitrofill", "", "");
+    fill.style.height = "100%";
+    fill.style.width = "100%";
+    fill.style.background = "#00c8ff";
+    fill.style.transition = "width .08s linear";
 
-  // minimal label style if missing
+    nb.appendChild(fill);
+    document.body.appendChild(nb);
+  }
+
   if (!document.getElementById("pLabelStyle")) {
     var st = document.createElement("style");
     st.id = "pLabelStyle";
@@ -416,36 +336,31 @@ function buildMapFromTrackCode(track) {
   }
 
   var parts = track.split("|");
- // ===== SPAWN (5th section: parts[4]) =====
-var spawnText = (parts[4] || "").trim();
-if (spawnText.length) {
-  var sp = spawnText.split("/");
-  var pos = sp[0].split(",");
-  var sx = parseFloat(pos[0]);
-  var sy = parseFloat(pos[1]);
-  var deg = parseFloat(sp[1] || "0");
 
-  // Map format exports Y inverted already, so most games use z = -sy.
-  var spawnX = sx;
-  var spawnZ = -sy;
+  // ===== SPAWN (5th section: parts[4]) =====
+  // If present, this MUST win and we MUST NOT overwrite it with computeSpawn().
+  var hasSpawn = false;
+  var spawnText = (parts[4] || "").trim();
+  if (spawnText.length) {
+    var sp = spawnText.split("/");
+    var posTok = (sp[0] || "").trim();
+    var p = parseV2(posTok);
+    if (p) {
+      spawnX = p.x;
+      spawnY = p.y;
+      hasSpawn = true;
+    }
 
-  // Heading degrees -> radians
-  var yaw = deg * Math.PI / 180;
+    var deg = parseFloat(sp[1] || "0");
+    if (isFinite(deg)) {
+      spawnDir = deg * Math.PI / 180;
+      hasSpawn = hasSpawn || true;
+    }
 
-  // --- APPLY POSITION ---
-  // Replace these two lines if your game uses different names (car.pos.x, player.x, etc.)
-  car.x = spawnX;
-  car.z = spawnZ;
-
-  // --- APPLY ORIENTATION ---
-  // Replace this if your game stores rotation differently (car.angle, car.rot, body.yaw, etc.)
-  car.angle = yaw;
-
-  // --- PUSH BACK so you spawn BEHIND the line, not on the wrong side ---
-  // Increase 0.8 if you still spawn too far forward.
-  car.x -= Math.cos(yaw) * 0.8;
-  car.z -= Math.sin(yaw) * 0.8;
-}
+    // push back so you spawn behind the line
+    spawnX -= Math.sin(spawnDir) * 0.8;
+    spawnY -= Math.cos(spawnDir) * 0.8;
+  }
 
   var wallsPart = (parts[0] || "").trim();
   var checkPart = (parts[1] || "").trim();
@@ -453,11 +368,11 @@ if (spawnText.length) {
 
   // collect bounds
   var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
-  function includePt(p) {
-    minX = Math.min(minX, p.x);
-    minY = Math.min(minY, p.y);
-    maxX = Math.max(maxX, p.x);
-    maxY = Math.max(maxY, p.y);
+  function includePt(p2) {
+    minX = Math.min(minX, p2.x);
+    minY = Math.min(minY, p2.y);
+    maxX = Math.max(maxX, p2.x);
+    maxY = Math.max(maxY, p2.y);
   }
 
   // Walls
@@ -504,7 +419,8 @@ if (spawnText.length) {
     ground.position.set(0, 0, 0);
   }
 
-  computeSpawn();
+  // If no explicit spawn was provided, derive it from the start/checkpoint lines
+  if (!hasSpawn) computeSpawn();
 }
 
 function addWall(a2, b2) {
@@ -546,6 +462,7 @@ function addCheckpoint(a2, b2, isStart) {
   var mid = a.clone().add(b).multiplyScalar(0.5);
   var width = Math.sqrt(len2);
 
+  // normal to the segment
   var n = vec2(ab.y, -ab.x);
   if (n.lengthSq() < 1e-9) n = vec2(0, 1);
   n.normalize();
@@ -606,8 +523,6 @@ function computeSpawn() {
   spawnDir = Math.atan2(forward.y, forward.x);
 }
 
-
-
 // ====== Cars + labels ======
 function makeCar(hexColor) {
   var car = new THREE.Object3D();
@@ -638,7 +553,6 @@ function makeCar(hexColor) {
     return w;
   }
 
-  // front wheels are children[0] and [1]
   var frontLeft = wheelMesh();
   frontLeft.position.set(-0.75, 0.35, 0.85);
   car.add(frontLeft);
@@ -681,24 +595,23 @@ function setupInputOnce() {
   if (setupInputOnce._did) return;
   setupInputOnce._did = true;
 
-window.addEventListener("keydown", function (e) {
-  var k = e.key;
-  if (k === "ArrowLeft" || k === "a" || k === "A") left = true;
-  if (k === "ArrowRight" || k === "d" || k === "D") right = true;
-  if (k === "ArrowUp" || k === "w" || k === "W") up = true;
-  if (k === "ArrowDown" || k === "s" || k === "S") down = true;
-  if (k === "Shift") nitro = true;
-});
+  window.addEventListener("keydown", function (e) {
+    var k = e.key;
+    if (k === "ArrowLeft" || k === "a" || k === "A") left = true;
+    if (k === "ArrowRight" || k === "d" || k === "D") right = true;
+    if (k === "ArrowUp" || k === "w" || k === "W") up = true;
+    if (k === "ArrowDown" || k === "s" || k === "S") down = true;
+    if (k === "Shift") nitro = true;
+  });
 
-window.addEventListener("keyup", function (e) {
-  var k = e.key;
-  if (k === "ArrowLeft" || k === "a" || k === "A") left = false;
-  if (k === "ArrowRight" || k === "d" || k === "D") right = false;
-  if (k === "ArrowUp" || k === "w" || k === "W") up = false;
-  if (k === "ArrowDown" || k === "s" || k === "S") down = false;
-  if (k === "Shift") nitro = false;
-});
-
+  window.addEventListener("keyup", function (e) {
+    var k = e.key;
+    if (k === "ArrowLeft" || k === "a" || k === "A") left = false;
+    if (k === "ArrowRight" || k === "d" || k === "D") right = false;
+    if (k === "ArrowUp" || k === "w" || k === "W") up = false;
+    if (k === "ArrowDown" || k === "s" || k === "S") down = false;
+    if (k === "Shift") nitro = false;
+  });
 
   function updateTouch(touches) {
     left = right = up = down = false;
@@ -818,16 +731,12 @@ function showModeMenu() {
   setupColorPickerOnce();
 
   clearModeUI();
-
-  // UI FIX: hide the original menu controls as soon as Start is pressed
   hideLobbyUI();
 
-  // Validate name
-  var nm = (nameEl && nameEl.value ? nameEl.value : "").trim();
-  if (!nm && nameEl) nameEl.value = "Player";
+  if (nameEl && !nameEl.value.trim()) nameEl.value = "Player";
 
   if (titleEl) {
-    titleEl.style.display = ""; // ensure visible for mode selection
+    titleEl.style.display = "";
     titleEl.innerHTML = "";
   }
 
@@ -1004,7 +913,7 @@ function createLocalPlayerFirebase() {
 
   var hex = parseInt(color.replace("#", "0x"), 16);
   var model = makeCar(hex);
-  me.model.position.z = me.data.y;
+  model.position.set(data.x, 0, data.y);
   model.rotation.y = data.dir;
   scene.add(model);
 
@@ -1036,7 +945,6 @@ function upsertPlayer(key, data) {
     scene.add(model);
 
     var label = makeLabel(data.name || "Player");
-
     p = { key: key, ref: playersRef.child(key), data: data, model: model, label: label, isMe: false };
     players[key] = p;
   } else {
@@ -1067,21 +975,15 @@ function hostFlow() {
   codeEl.style.width = "100%";
   if (foreEl) foreEl.appendChild(codeEl);
 
-var sg = makeDiv("startgame", "", "START GAME");
-
-sg.style.position = "fixed";     // important
-sg.style.bottom = "20px";        // distance from bottom of screen
-sg.style.left = "50%";
-sg.style.transform = "translateX(-50%)";
-sg.style.width = "420px";
-sg.style.textAlign = "center";
-sg.style.zIndex = "99999";       // always above UI
-
-document.body.appendChild(sg);   // attach to body, not fore
-
-
-
-
+  var sg = makeDiv("startgame", "", "START GAME");
+  sg.style.position = "fixed";
+  sg.style.bottom = "20px";
+  sg.style.left = "50%";
+  sg.style.transform = "translateX(-50%)";
+  sg.style.width = "420px";
+  sg.style.textAlign = "center";
+  sg.style.zIndex = "99999";
+  document.body.appendChild(sg);
 
   sg.onclick = function () {
     if (!roomRef) return;
@@ -1105,17 +1007,15 @@ function joinFlow() {
   if (foreEl) foreEl.appendChild(inEl);
   inEl.focus();
 
-var joinBtn = makeDiv("startgame", "", "JOIN");
-
-joinBtn.style.position = "fixed";   // same fix as START button
-joinBtn.style.bottom = "20px";
-joinBtn.style.left = "50%";
-joinBtn.style.transform = "translateX(-50%)";
-joinBtn.style.width = "420px";
-joinBtn.style.textAlign = "center";
-joinBtn.style.zIndex = "99999";
-
-document.body.appendChild(joinBtn);
+  var joinBtn = makeDiv("startgame", "", "JOIN");
+  joinBtn.style.position = "fixed";
+  joinBtn.style.bottom = "20px";
+  joinBtn.style.left = "50%";
+  joinBtn.style.transform = "translateX(-50%)";
+  joinBtn.style.width = "420px";
+  joinBtn.style.textAlign = "center";
+  joinBtn.style.zIndex = "99999";
+  document.body.appendChild(joinBtn);
 
   function doJoin() {
     var code = (inEl.value || "").trim().toUpperCase();
@@ -1169,9 +1069,7 @@ function startGame() {
   if (gameStarted) return;
 
   gameStarted = true;
-  playerCollisionEnabled = false;   // reset each round
-
-  
+  playerCollisionEnabled = false;
 
   if (foreEl) foreEl.style.display = "none";
   hideAllMenusForGameplay();
@@ -1180,15 +1078,10 @@ function startGame() {
   safeRemove(document.getElementById("startgame"));
 
   showOverlayMsg("");
-
   startCountdown(function () {});
 
-  setTimeout(function () {
-    playerCollisionEnabled = true;
-  }, 5000);
+  setTimeout(function () { playerCollisionEnabled = true; }, 5000);
 }
-
-
 
 function startCountdown(done) {
   gameSortaStarted = true;
@@ -1202,25 +1095,65 @@ function startCountdown(done) {
 
   var iv = setInterval(function () {
     t--;
-
     if (t <= 0) {
       clearInterval(iv);
-
       if (countdownEl) {
         countdownEl.innerHTML = "";
         countdownEl.style.display = "none";
       }
-
       gameSortaStarted = false;
       if (done) done();
       return;
     }
-
     if (countdownEl) {
       countdownEl.style.display = "block";
       countdownEl.innerHTML = String(t);
     }
   }, 1000);
+}
+
+// ====== Player collisions (optional) ======
+function collideWithPlayers() {
+  if (!playerCollisionEnabled || !me) return;
+
+  var pPos = vec2(me.data.x, me.data.y);
+  var pVel = vec2(me.data.xv, me.data.yv);
+
+  var radius = 1.35;
+
+  for (var k in players) {
+    if (!players.hasOwnProperty(k)) continue;
+    if (k === meKey) continue;
+
+    var p = players[k];
+    if (!p || !p.data) continue;
+
+    var oPos = vec2(p.data.x, p.data.y);
+    var delta = pPos.clone().sub(oPos);
+    var dist = delta.length();
+    if (dist === 0) continue;
+
+    if (dist < radius * 2) {
+      var n = delta.normalize();
+      var overlap = radius * 2 - dist;
+      pPos.add(n.clone().multiplyScalar(overlap));
+
+      if (pVel.dot(n) < 0) {
+        pVel = reflect2(pVel, n);
+        pVel.multiplyScalar(BOUNCE);
+      }
+
+      p.data.x -= n.x * overlap * 0.5;
+      p.data.y -= n.y * overlap * 0.5;
+      p.data.xv -= n.x * 0.12;
+      p.data.yv -= n.y * 0.12;
+    }
+  }
+
+  me.data.x = pPos.x;
+  me.data.y = pPos.y;
+  me.data.xv = pVel.x;
+  me.data.yv = pVel.y;
 }
 
 // ====== Physics + game loop ======
@@ -1234,86 +1167,69 @@ function updateMePhysics(warp) {
   }
   me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
 
-
-
   var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
   me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
 
   var brake = down ? 0.82 : 1.0;
+  var usingNitro = nitro && nitroFuel > 0;
 
-var usingNitro = nitro && nitroFuel > 0;
+  var ACCEL = SPEED * (usingNitro ? 5.0 : 2.0);
+  var FRICTION = 0.965;
+  var DRAG = 0.992;
 
-var ACCEL = SPEED * (usingNitro ? 5.0 : 2.0);
-var FRICTION = 0.965;
-var DRAG = 0.992;
+  var REVERSE_ACCEL = ACCEL * 2.3;
+  var MAX_REVERSE = MAX_SPEED * 0.45;
 
-// Only accelerate when pressing UP / W
-var REVERSE_ACCEL = ACCEL * 2.3;   // slower than forward
-var MAX_REVERSE = MAX_SPEED * 0.45;
-if (usingNitro) {
-  nitroFuel -= NITRO_DRAIN * warp * 0.016;
-} else {
-  nitroFuel += NITRO_REGEN * warp * 0.016;
-}
+  if (usingNitro) nitroFuel -= NITRO_DRAIN * warp * 0.016;
+  else nitroFuel += NITRO_REGEN * warp * 0.016;
+  nitroFuel = clamp(nitroFuel, 0, NITRO_MAX);
 
-nitroFuel = clamp(nitroFuel, 0, NITRO_MAX);
+  if (up) {
+    me.data.xv += Math.sin(me.data.dir) * ACCEL * warp;
+    me.data.yv += Math.cos(me.data.dir) * ACCEL * warp;
+  }
+  if (down) {
+    me.data.xv -= Math.sin(me.data.dir) * REVERSE_ACCEL * warp;
+    me.data.yv -= Math.cos(me.data.dir) * REVERSE_ACCEL * warp;
+  }
 
-if (up) {
-  me.data.xv += Math.sin(me.data.dir) * ACCEL * warp;
-  me.data.yv += Math.cos(me.data.dir) * ACCEL * warp;
-}
+  me.data.xv *= Math.pow(FRICTION, warp);
+  me.data.yv *= Math.pow(FRICTION, warp);
 
-if (down) {
-  me.data.xv -= Math.sin(me.data.dir) * REVERSE_ACCEL * warp;
-  me.data.yv -= Math.cos(me.data.dir) * REVERSE_ACCEL * warp;
-}
+  me.data.xv *= DRAG * brake;
+  me.data.yv *= DRAG * brake;
 
+  var forwardSpeed =
+    me.data.xv * Math.sin(me.data.dir) +
+    me.data.yv * Math.cos(me.data.dir);
 
-me.data.xv *= Math.pow(FRICTION, warp);
-me.data.yv *= Math.pow(FRICTION, warp);
+  var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
 
-me.data.xv *= DRAG * brake;
-me.data.yv *= DRAG * brake;
+  if (forwardSpeed > topSpeed) {
+    var s1 = topSpeed / forwardSpeed;
+    me.data.xv *= s1;
+    me.data.yv *= s1;
+  }
+  if (forwardSpeed < -MAX_REVERSE) {
+    var s2 = MAX_REVERSE / Math.abs(forwardSpeed);
+    me.data.xv *= s2;
+    me.data.yv *= s2;
+  }
 
+  me.data.x += me.data.xv * warp;
+  me.data.y += me.data.yv * warp;
 
- var velMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-var forwardSpeed =
-  me.data.xv * Math.sin(me.data.dir) +
-  me.data.yv * Math.cos(me.data.dir);
+  collideMeWithWalls();
+  collideWithPlayers();
+  handleCheckpoints();
 
-var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
-
-if (forwardSpeed > topSpeed) {
-  var s = topSpeed / forwardSpeed;
-  me.data.xv *= s;
-  me.data.yv *= s;
-}
-
-if (forwardSpeed < -MAX_REVERSE) {
-  var s = MAX_REVERSE / Math.abs(forwardSpeed);
-  me.data.xv *= s;
-  me.data.yv *= s;
-}
-
-
-
-me.data.x += me.data.xv * warp;
-me.data.y += me.data.yv * warp;
-
-collideMeWithWalls();
-collideWithPlayers();
-handleCheckpoints();
-
-
-if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
-  me.data.x = spawnX;
-  me.data.y = spawnY;
-  me.data.xv = 0;
-  me.data.yv = 0;
-me.data.dir = spawnDir;
-
-}
-
+  if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
+    me.data.x = spawnX;
+    me.data.y = spawnY;
+    me.data.xv = 0;
+    me.data.yv = 0;
+    me.data.dir = spawnDir;
+  }
 
   me.model.position.x = me.data.x;
   me.model.position.z = me.data.y;
@@ -1332,19 +1248,16 @@ function collideMeWithWalls() {
     var c = segClosestPoint(p, w.a, w.b);
     var delta = p.clone().sub(c);
     var dist = delta.length();
+
     if (dist < WALL_SIZE) {
       var n = (dist > 1e-6) ? delta.multiplyScalar(1 / dist) : vec2(0, 1);
-    if (v.dot(n) < 0) {
-  var speed = v.length();
 
-  v = reflect2(v, n);
-
-  // strong arcade bounce
-  v.multiplyScalar(BOUNCE);
-
-  // push car outward so it never sticks
-  p.add(n.clone().multiplyScalar(0.08 + speed * 0.4));
-}
+      if (v.dot(n) < 0) {
+        var speed = v.length();
+        v = reflect2(v, n);
+        v.multiplyScalar(BOUNCE);
+        p.add(n.clone().multiplyScalar(0.08 + speed * 0.4));
+      }
 
       p = c.add(n.multiplyScalar(WALL_SIZE + 0.001));
     }
@@ -1380,19 +1293,19 @@ function handleCheckpoints() {
       me.data.checkpoint = 1;
     }
   }
-if (me.data.lap > LAPS && countdownEl) {
-  gameSortaStarted = true;
 
-  countdownEl.style.display = "block";
-  countdownEl.style.fontSize = "18vmin";
-  countdownEl.innerHTML =
-    (me.data.name || "Player").replaceAll("<", "&lt;") +
-    "<br>WINS!";
+  if (me.data.lap > LAPS && countdownEl) {
+    gameSortaStarted = true;
 
-  me.data.xv = 0;
-  me.data.yv = 0;
-}
+    countdownEl.style.display = "block";
+    countdownEl.style.fontSize = "18vmin";
+    countdownEl.innerHTML =
+      (me.data.name || "Player").replaceAll("<", "&lt;") +
+      "<br>WINS!";
 
+    me.data.xv = 0;
+    me.data.yv = 0;
+  }
 }
 
 function updateCamera(warp) {
@@ -1468,7 +1381,6 @@ function maybeSendToFirebase(ts) {
   me.ref.set(me.data);
 }
 
-
 // ====== Main loop ======
 function updateNitroUI() {
   var fillEl = document.getElementById("nitrofill");
@@ -1487,23 +1399,21 @@ function renderLoop(ts) {
   timepassed = Math.min(timepassed, 50);
   var warp = timepassed / 16;
 
- if (gameStarted && me) {
-  if (!gameSortaStarted) updateMePhysics(warp);
-  updateRemoteVisuals(warp);
-  updateCamera(warp);
-  updateHud();
-  updateNitroUI();
-  maybeSendToFirebase(ts);
-} else {
-  var a = ts * 0.0004;
-  camera.position.set(50 * Math.sin(a), 20, 50 * Math.cos(a));
-  camera.lookAt(new THREE.Vector3(0, 0, 0));
-  updateRemoteVisuals(warp);
-}
-
+  if (gameStarted && me) {
+    if (!gameSortaStarted) updateMePhysics(warp);
+    updateRemoteVisuals(warp);
+    updateCamera(warp);
+    updateHud();
+    updateNitroUI();
+    maybeSendToFirebase(ts);
+  } else {
+    var a = ts * 0.0004;
+    camera.position.set(50 * Math.sin(a), 20, 50 * Math.cos(a));
+    camera.lookAt(new THREE.Vector3(0, 0, 0));
+    updateRemoteVisuals(warp);
+  }
 
   updateLabels();
-
   renderer.render(scene, camera);
   MODS();
 }
