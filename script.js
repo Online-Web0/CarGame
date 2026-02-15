@@ -60,13 +60,6 @@ try {
 var scene, renderer, camera;
 var mapGroup, cpGroup, decoGroup;
 var ground;
-// ====== Nitro VFX ======
-var nitroFX = {
-  group: null,
-  flames: [],
-  streaks: [],
-  baseFov: 90
-};
 
 // ====== Map physics data ======
 var wallSegs = [];  // {a:V2,b:V2,dir:V2,len2:number,mesh:Mesh}
@@ -226,148 +219,6 @@ function ensureEngine() {
   scene.add(mapGroup);
   scene.add(cpGroup);
   scene.add(decoGroup);
-function initNitroFX() {
-  if (!scene || nitroFX.group) return;
-
-  nitroFX.baseFov = (camera && camera.fov) ? camera.fov : 90;
-
-  nitroFX.group = new THREE.Group();
-  nitroFX.group.visible = false; // only on during nitro
-  scene.add(nitroFX.group);
-
-  // ---- Flames (2 cones behind the car) ----
-  function flameMesh() {
-    var geo = new THREE.ConeGeometry(0.22, 1.2, 10);
-    geo.rotateX(Math.PI); // point backward
-    var mat = new THREE.MeshStandardMaterial({
-      color: 0x3fd6ff, // cyan-blue
-      roughness: 0.2,
-      metalness: 0.0,
-      emissive: 0x1a6cff,
-      emissiveIntensity: 1.4,
-      transparent: true,
-      opacity: 0.85
-    });
-    var m = new THREE.Mesh(geo, mat);
-    m.castShadow = false;
-    m.receiveShadow = false;
-    return m;
-  }
-
-  for (var i = 0; i < 2; i++) {
-    var f = flameMesh();
-    nitroFX.group.add(f);
-    nitroFX.flames.push(f);
-  }
-
-  // ---- Ground streaks (small planes, reused) ----
-  function streakMesh() {
-    var geo = new THREE.PlaneGeometry(0.18, 2.6);
-    geo.rotateX(-Math.PI / 2);
-    var mat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 1,
-      metalness: 0,
-      emissive: 0x7fdcff,
-      emissiveIntensity: 0.9,
-      transparent: true,
-      opacity: 0.0
-    });
-    var m = new THREE.Mesh(geo, mat);
-    m.position.y = 0.03;
-    return m;
-  }
-
-  for (var s = 0; s < 18; s++) {
-    var st = streakMesh();
-    nitroFX.group.add(st);
-    nitroFX.streaks.push({
-      mesh: st,
-      life: 0,
-      xOff: (Math.random() * 2 - 1) * 1.6,
-      zOff: -Math.random() * 10 - 2
-    });
-  }
-}
-function updateNitroFX(ts, warp) {
-  if (!me || !me.model || !nitroFX.group) return;
-
-  // your nitro condition (already exists in physics)
-  var usingNitro = nitro && nitroFuel > 0 && gameStarted && !gameSortaStarted;
-
-  // show/hide group
-  nitroFX.group.visible = usingNitro;
-
-  // slight FOV kick (visual only)
-  if (camera) {
-    var targetFov = nitroFX.baseFov + (usingNitro ? 10 : 0);
-    camera.fov += (targetFov - camera.fov) * clamp(0.12 * warp, 0, 1);
-    camera.updateProjectionMatrix();
-  }
-
-  if (!usingNitro) return;
-
-  // attach FX group to car position (not parented, so safe)
-  // Attach FX to car once
-if (nitroFX.group.parent !== me.model) {
-  me.model.add(nitroFX.group);
-}
-
-
-  // place flames behind car (two nozzles)
-  var t = ts * 0.001;
-
-  // car faces +dir in your code: forward is (sin(dir), cos(dir)) in x/z
-  // behind car is -forward => local z +? easier: use local space offsets
- var leftNozzle  = new THREE.Vector3(-0.45, 0.45, -1.7);
-var rightNozzle = new THREE.Vector3( 0.45, 0.45, -1.7);
-
-
-  // animate flicker
-  for (var i = 0; i < nitroFX.flames.length; i++) {
-    var f = nitroFX.flames[i];
-    var off = (i === 0) ? leftNozzle : rightNozzle;
-
-    f.position.copy(off);
-    f.scale.set(1, 1, 1);
-
-    var flick = 0.75 + 0.25 * Math.sin(t * 28 + i * 2.1);
-    f.scale.set(1, flick, 1);
-    f.material.opacity = 0.55 + 0.35 * flick;
-    f.material.emissiveIntensity = 1.2 + 0.9 * flick;
-  }
-
-  // streaks: recycle behind the car and fade forward
-  var speed = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-  var spawnRate = clamp(speed * 20, 8, 30); // more speed = more streaks
-
-  for (var s = 0; s < nitroFX.streaks.length; s++) {
-    var st = nitroFX.streaks[s];
-
-    st.life -= 0.035 * warp * (1 + speed * 2);
-    if (st.life <= 0) {
-      st.life = 1;
-
-      // randomize offsets behind car
-      st.xOff = (Math.random() * 2 - 1) * 2.0;
-      st.zOff = -Math.random() * 14 - 3;
-
-      st.mesh.position.set(st.xOff, 0.03, st.zOff);
-      st.mesh.scale.set(1, 1, 1);
-    } else {
-      // drift toward camera (forward relative to car)
-st.mesh.position.z += (0.25 + speed * 5) * warp;
-      st.mesh.position.x *= Math.pow(0.985, warp);
-
-      // fade out
-      st.mesh.material.opacity = st.life * 0.22;
-
-      // stretch with speed
-      var yScale = 1 + speed * 3;
-      st.mesh.scale.set(1, yScale, 1);
-    }
-  }
-}
 
   // Ground (resized after loading map)
   var gGeo = new THREE.PlaneGeometry(300, 300);
@@ -1759,7 +1610,6 @@ function renderLoop(ts) {
     camera.lookAt(new THREE.Vector3(0, 0, 0));
     updateRemoteVisuals(warp);
   }
-updateNitroFX(ts, warp);
 
   updateLabels();
   renderer.render(scene, camera);
@@ -1770,7 +1620,6 @@ updateNitroFX(ts, warp);
 function init() {
   ensureEngine();
   if (foreEl) foreEl.style.pointerEvents = "auto";
-initNitroFX();
 
   setupToolbarOnce();
   setupInputOnce();
