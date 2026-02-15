@@ -1802,12 +1802,19 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
       me.data.yv *= s2;
     }
 
-    me.data.x += me.data.xv * warp;
-    me.data.y += me.data.yv * warp;
+ var steps = Math.ceil(Math.max(Math.abs(me.data.xv), Math.abs(me.data.yv)) * 4);
+steps = Math.max(1, steps);
 
-    collideMeWithWallsRect();
-    collideWithPlayers();
-    handleCheckpoints();
+for (var s = 0; s < steps; s++) {
+  me.data.x += (me.data.xv * warp) / steps;
+  me.data.y += (me.data.yv * warp) / steps;
+
+  collideMeWithWallsRect();
+  collideWithPlayers();
+}
+
+handleCheckpoints();
+
 
     if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
       me.data.x = spawnX;
