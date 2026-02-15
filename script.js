@@ -39,8 +39,8 @@
   var CAM_HEIGHT = 4;
 
   // ====== Car hitbox (rectangle) ======
-  var CAR_HALF_WIDTH = 1.10;
-  var CAR_HALF_LENGTH = 2.05;
+  var CAR_HALF_WIDTH = 0.95;
+  
 
   function MODS() {}
 
