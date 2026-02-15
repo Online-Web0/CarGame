@@ -12,17 +12,17 @@ var WALL_SIZE = 1.2;
 var MOUNTAIN_DIST = 2500;
 var OOB_DIST = 2000;
 var LAPS = 3;
-var NITRO_MULT = 2.2;
+var NITRO_MULT = 2.0;
 
 var nitro = false;
 var NITRO_MAX = 100;
 var nitroFuel = NITRO_MAX;
 
-var NITRO_DRAIN = 35;   // per second
-var NITRO_REGEN = 18;   // per second
+var NITRO_DRAIN = 45;   // per second
+var NITRO_REGEN = 13;   // per second
 
 // New tuning
-var MAX_SPEED = 0.36;
+var MAX_SPEED = 0.30;
 var STEER_MIN = 0.05;
 var STEER_SPEED = 0.12;
 var CAM_HEIGHT = 4;
