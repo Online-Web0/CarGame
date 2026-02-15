@@ -39,8 +39,9 @@
   var CAM_HEIGHT = 4;
 
   // ====== Car hitbox (rectangle) ======
-var CAR_HALF_WIDTH = 0.85;
-var CAR_HALF_LENGTH = 1.45;
+var CAR_HALF_WIDTH = 1.08;   // wheel-to-wheel
+var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
+
 
   function MODS() {}
 
