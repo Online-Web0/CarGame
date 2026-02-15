@@ -527,50 +527,136 @@ function computeSpawn() {
 function makeCar(hexColor) {
   var car = new THREE.Object3D();
 
-  var bodyGeo = new THREE.BoxGeometry(1.6, 0.6, 2.6);
-  var bodyMat = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.7, metalness: 0.05 });
-  var body = new THREE.Mesh(bodyGeo, bodyMat);
+  // ----- Materials -----
+  var bodyMat = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.55, metalness: 0.08 });
+  var darkMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.85, metalness: 0.02 });
+  var grayMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.9, metalness: 0.02 });
+
+  // ===== (CHILD 0) Main body / monocoque =====
+  var body = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.32, 2.9), bodyMat);
   body.castShadow = true;
   body.receiveShadow = true;
-  body.position.y = 0.6;
+  body.position.y = 0.55;
   car.add(body);
 
-  var cabinGeo = new THREE.BoxGeometry(1.2, 0.5, 1.2);
-  var cabinMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9 });
-  var cabin = new THREE.Mesh(cabinGeo, cabinMat);
+  // Add F1 details as children of body (does NOT affect car.children indices)
+  // Floor / plank
+  var floor = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.06, 3.2), darkMat);
+  floor.position.set(0, -0.17, 0);
+  body.add(floor);
+
+  // Nose (tapered cylinder rotated to point forward)
+  var nose = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.22, 1.2, 10), bodyMat);
+  nose.rotation.x = Math.PI / 2;
+  nose.position.set(0, -0.02, 1.65);
+  body.add(nose);
+
+  // Front wing (wide, thin)
+  var frontWing = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.06, 0.35), darkMat);
+  frontWing.position.set(0, -0.16, 2.05);
+  body.add(frontWing);
+
+  // Front wing endplates
+  var feL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.35), darkMat);
+  feL.position.set(-1.06, -0.04, 2.05);
+  body.add(feL);
+
+  var feR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.22, 0.35), darkMat);
+  feR.position.set(1.06, -0.04, 2.05);
+  body.add(feR);
+
+  // Sidepods (left/right)
+  var podL = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.20, 1.25), bodyMat);
+  podL.position.set(-0.78, -0.02, -0.10);
+  body.add(podL);
+
+  var podR = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.20, 1.25), bodyMat);
+  podR.position.set(0.78, -0.02, -0.10);
+  body.add(podR);
+
+  // Engine cover
+  var engineCover = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.22, 1.15), bodyMat);
+  engineCover.position.set(0, 0.12, -1.05);
+  body.add(engineCover);
+
+  // Rear wing (main plane)
+  var rearWing = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.40), darkMat);
+  rearWing.position.set(0, 0.18, -1.82);
+  body.add(rearWing);
+
+  // Rear wing endplates
+  var reL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.40, 0.40), darkMat);
+  reL.position.set(-0.66, 0.02, -1.82);
+  body.add(reL);
+
+  var reR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.40, 0.40), darkMat);
+  reR.position.set(0.66, 0.02, -1.82);
+  body.add(reR);
+
+  // Diffuser
+  var diffuser = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.10, 0.45), grayMat);
+  diffuser.position.set(0, -0.12, -1.75);
+  body.add(diffuser);
+
+  // ===== (CHILD 1) Cockpit / canopy (kept as 2nd child for index safety) =====
+  var cabin = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.20, 0.85), grayMat);
   cabin.castShadow = true;
   cabin.receiveShadow = true;
-  cabin.position.set(0, 0.95, -0.2);
+  cabin.position.set(0, 0.78, 0.25);
   car.add(cabin);
 
-  function wheelMesh() {
-    var g = new THREE.CylinderGeometry(0.32, 0.32, 0.24, 16);
-    var m = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 1 });
+  // Halo (simple ring)
+  var halo = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.04, 8, 16), darkMat);
+  halo.rotation.x = Math.PI / 2;
+  halo.position.set(0, 0.10, -0.05);
+  cabin.add(halo);
+
+  // Driver head
+  var head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }));
+  head.position.set(0, 0.10, 0.05);
+  cabin.add(head);
+
+  // ===== Wheels (IMPORTANT: top-level order preserved) =====
+  function wheelMesh(radius, thickness) {
+    var g = new THREE.CylinderGeometry(radius, radius, thickness, 18);
+    var m = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 1 });
     var w = new THREE.Mesh(g, m);
-    w.rotation.z = Math.PI / 2;
+    w.rotation.z = Math.PI / 2; // keep so steering code works
     w.castShadow = true;
     w.receiveShadow = true;
+
+    // Rim (child of wheel so it doesn't affect indices)
+    var rim = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius * 0.62, radius * 0.62, thickness + 0.02, 14),
+      new THREE.MeshStandardMaterial({ color: 0x2f2f2f, roughness: 0.6, metalness: 0.15 })
+    );
+    rim.rotation.z = Math.PI / 2;
+    w.add(rim);
+
     return w;
   }
 
-  var frontLeft = wheelMesh();
-  frontLeft.position.set(-0.75, 0.35, 0.85);
+  // Front wheels (CHILD 2, CHILD 3) — steering code relies on these
+  var frontLeft = wheelMesh(0.36, 0.28);
+  frontLeft.position.set(-1.05, 0.36, 1.35);
   car.add(frontLeft);
 
-  var frontRight = wheelMesh();
-  frontRight.position.set(0.75, 0.35, 0.85);
+  var frontRight = wheelMesh(0.36, 0.28);
+  frontRight.position.set(1.05, 0.36, 1.35);
   car.add(frontRight);
 
-  var backLeft = wheelMesh();
-  backLeft.position.set(-0.75, 0.35, -0.85);
+  // Rear wheels (CHILD 4, CHILD 5)
+  var backLeft = wheelMesh(0.40, 0.32);
+  backLeft.position.set(-1.05, 0.40, -1.30);
   car.add(backLeft);
 
-  var backRight = wheelMesh();
-  backRight.position.set(0.75, 0.35, -0.85);
+  var backRight = wheelMesh(0.40, 0.32);
+  backRight.position.set(1.05, 0.40, -1.30);
   car.add(backRight);
 
   return car;
 }
+
 
 function makeLabel(name) {
   var el = document.createElement("div");
