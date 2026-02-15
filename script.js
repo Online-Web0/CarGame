@@ -416,7 +416,9 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
 
       var deg = parseFloat(sp[1] || "0");
       if (isFinite(deg)) {
-        spawnDir = deg * Math.PI / 180;
+// Editor deg assumed: 0° = +X (right), 90° = +Y (up)
+// Game dir convention: 0 rad = +Y (forward)
+spawnDir = (Math.PI / 2) - (deg * Math.PI / 180);
         hasSpawn = true;
       }
 
@@ -572,7 +574,8 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
 
     spawnX = start.mid.x + forward.x * 5;
     spawnY = start.mid.y + forward.y * 5;
-    spawnDir = Math.atan2(forward.y, forward.x);
+// Inverse of fwd = (sin(dir), cos(dir))
+spawnDir = Math.atan2(forward.x, forward.y);
   }
 
   // ====== Cars + labels ======
@@ -1726,11 +1729,7 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
     }
     me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
 
-    var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-    var steerSign = forwardSpeed >= 0 ? 1 : -1;
-
-me.data.dir += steerSign * me.data.steer *
-  (STEER_MIN + speedMag * STEER_SPEED) * warp;
+  
 
 
     var brake = down ? 0.82 : 1.0;
@@ -1792,6 +1791,12 @@ me.data.dir += steerSign * me.data.steer *
       me.data.xv * Math.sin(me.data.dir) +
       me.data.yv * Math.cos(me.data.dir);
 
+      var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+    var steerSign = forwardSpeed >= 0 ? 1 : -1;
+
+me.data.dir += steerSign * me.data.steer *
+  (STEER_MIN + speedMag * STEER_SPEED) * warp;
+    
     var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
     if (slipFactor > 0.001) topSpeed *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
 
