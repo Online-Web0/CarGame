@@ -5,6 +5,7 @@ var trees = [];
 var arrows = [];
 var erase = [];
 var hist = [];
+var spawn = { x: 0, y: 0, angle: 0 };
 
 var mouse = {
 	down: false,
@@ -68,6 +69,24 @@ function update(){
 
 	// draw everything in grid space (offset applied)
 	c.translate(offset.x, offset.y);
+// spawn box
+c.fillStyle = "#08cc3c";
+c.fillRect(
+    scale * spawn.x - scale,
+    scale * spawn.y - scale,
+    scale * 2,
+    scale * 2
+);
+
+// spawn direction arrow
+c.strokeStyle = "#ffffff";
+c.beginPath();
+c.moveTo(scale * spawn.x, scale * spawn.y);
+c.lineTo(
+    scale * spawn.x + Math.cos(spawn.angle) * scale * 2,
+    scale * spawn.y + Math.sin(spawn.angle) * scale * 2
+);
+c.stroke();
 
 	// walls
 	c.strokeStyle = "#f48342";
@@ -148,6 +167,10 @@ ca.onmousedown = function(e){
 	mouse.cur.y = e.clientY;
 	mouse.start.x = e.clientX;
 	mouse.start.y = e.clientY;
+if (sel === 5){
+    spawn.x = gridX(mouse.start.x);
+    spawn.y = gridY(mouse.start.y);
+}
 
 	if (sel === 0){
 		walls.push({
@@ -175,6 +198,12 @@ ca.onmousedown = function(e){
 ca.onmousemove = function(e){
 	mouse.cur.x = e.clientX;
 	mouse.cur.y = e.clientY;
+if (sel === 5 && mouse.down){
+    spawn.angle = Math.atan2(
+        mouse.start.y - mouse.cur.y,
+        mouse.start.x - mouse.cur.x
+    );
+}
 
 	if (sel === 0 && mouse.down){
 		walls[walls.length - 1].end.x = gridX(mouse.cur.x);
