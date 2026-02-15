@@ -564,10 +564,36 @@ function addTree(x, y) {
 }
 
 function computeSpawn() {
+
+  // If trackcode spawn exists, use it
+  if (typeof spawnX !== "undefined" && typeof spawnY !== "undefined") {
+    if (isFinite(spawnX) && isFinite(spawnY)) {
+      return;
+    }
+  }
+
+  // fallback to checkpoint spawn
   if (!cpSegs.length) {
-    spawnX = 0; spawnY = 0; spawnDir = 0;
+    spawnX = 0;
+    spawnY = 0;
+    spawnDir = 0;
     return;
   }
+
+  var start = cpSegs[0];
+  var forward = start.normal.clone();
+
+  if (cpSegs.length > 1) {
+    var chk = cpSegs[1];
+    var v = chk.mid.clone().sub(start.mid);
+    if (v.dot(forward) < 0) forward.multiplyScalar(-1);
+  }
+
+  spawnX = start.mid.x + forward.x * 5;
+  spawnY = start.mid.y + forward.y * 5;
+  spawnDir = Math.atan2(forward.y, forward.x);
+}
+
 
   var start = cpSegs[0];
   var forward = start.normal.clone();
