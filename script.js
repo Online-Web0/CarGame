@@ -552,15 +552,6 @@ function addTree(x, y) {
 }
 
 function computeSpawn() {
-  // If editor spawn exists, use it instead of checkpoint spawn
-  if (typeof spawn !== "undefined") {
-    spawnX = spawn.x * 10;
-    spawnY = spawn.y * 10;
-    spawnDir = spawn.angle;
-    return;
-  }
-
-  // fallback to checkpoint spawn
   if (!cpSegs.length) {
     spawnX = 0; spawnY = 0; spawnDir = 0;
     return;
@@ -568,18 +559,6 @@ function computeSpawn() {
 
   var start = cpSegs[0];
   var forward = start.normal.clone();
-
-  if (cpSegs.length > 1) {
-    var chk = cpSegs[1];
-    var v = chk.mid.clone().sub(start.mid);
-    if (v.dot(forward) < 0) forward.multiplyScalar(-1);
-  }
-
-  spawnX = start.mid.x + forward.x * 5;
-  spawnY = start.mid.y + forward.y * 5;
-  spawnDir = Math.atan2(forward.y, forward.x);
-}
-
 
   if (cpSegs.length > 1) {
     var chk = cpSegs[1];
