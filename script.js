@@ -14,10 +14,8 @@ var OOB_DIST = 2000;
 var LAPS = 3;
 var NITRO_MULT = 2.0;
 
-var nitro = false;
 var NITRO_MAX = 100;
 var nitroFuel = NITRO_MAX;
-
 var NITRO_DRAIN = 45;   // per second
 var NITRO_REGEN = 13;   // per second
 
@@ -28,6 +26,23 @@ var STEER_SPEED = 0.12;
 var CAM_HEIGHT = 4;
 
 function MODS() {}
+
+// ====== Nitro input/state (edge-trigger + lockout) ======
+var nitro = false;          // Shift currently held (key-down)
+var nitroArmed = false;     // armed on a fresh press
+var nitroLock = false;      // locks after fuel hits 0 until Shift released
+var nitroActive = false;    // true only while boost actually applies
+
+// ====== Slipstream tuning ======
+var SLIP_DIST = 11.0;            // max distance behind a car to draft
+var SLIP_WIDTH = 2.2;            // max lateral offset from their centerline
+var SLIP_ACCEL_BONUS = 0.70;     // accel multiplier bonus (0.70 => up to +70%)
+var SLIP_TOPSPEED_BONUS = 0.22;  // top speed bonus (0.22 => up to +22%)
+var SLIP_DRAG_REDUCE = 0.007;    // added to DRAG (reduces drag) while drafting
+var SLIP_PUSH = 0.90;            // small forward “pull” while drafting
+
+var slipTargetKey = null;        // which player I'm drafting (for visuals)
+var slipFactor = 0;              // 0..1 drafting strength
 
 // ====== Firebase connection ======
 // NOTE: This assumes firebase scripts are already loaded in index.html
@@ -60,142 +75,6 @@ try {
 var scene, renderer, camera;
 var mapGroup, cpGroup, decoGroup;
 var ground;
-// ====== Nitro VFX (SAFE) ======
-var nitroFX = {
-  group: null,
-  flames: [],
-  streaks: [],
-  baseFov: 90
-};
-
-function initNitroFX() {
-  if (!scene || nitroFX.group) return;
-
-  nitroFX.baseFov = (camera && camera.fov) ? camera.fov : 90;
-
-  nitroFX.group = new THREE.Group();
-  nitroFX.group.visible = false;
-  scene.add(nitroFX.group);
-
-  // Flames (2 cones behind car)
-  function flameMesh() {
-    var geo = new THREE.ConeGeometry(0.22, 1.2, 10);
-    geo.rotateX(Math.PI); // points backward
-    var mat = new THREE.MeshStandardMaterial({
-      color: 0x3fd6ff,
-      roughness: 0.2,
-      metalness: 0.0,
-      emissive: 0x1a6cff,
-      emissiveIntensity: 2.2,
-      transparent: true,
-      opacity: 0.85
-    });
-    var m = new THREE.Mesh(geo, mat);
-    m.castShadow = false;
-    m.receiveShadow = false;
-    return m;
-  }
-
-  for (var i = 0; i < 2; i++) {
-    var f = flameMesh();
-    nitroFX.group.add(f);
-    nitroFX.flames.push(f);
-  }
-
-  // Ground streaks (planes)
-  function streakMesh() {
-    var geo = new THREE.PlaneGeometry(0.18, 2.6);
-    geo.rotateX(-Math.PI / 2);
-    var mat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      roughness: 1,
-      metalness: 0,
-      emissive: 0x7fdcff,
-      emissiveIntensity: 1.0,
-      transparent: true,
-      opacity: 0.0
-    });
-    var m = new THREE.Mesh(geo, mat);
-    m.position.y = 0.03;
-    return m;
-  }
-
-  for (var s = 0; s < 18; s++) {
-    var st = streakMesh();
-    nitroFX.group.add(st);
-    nitroFX.streaks.push({
-      mesh: st,
-      life: 0,
-      xOff: (Math.random() * 2 - 1) * 1.6,
-      zOff: -Math.random() * 10 - 2
-    });
-  }
-}
-
-function updateNitroFX(ts, warp) {
-  if (!me || !me.model || !nitroFX.group) return;
-
-  // only show during actual nitro use
-  var usingNitro = nitro && nitroFuel > 0 && gameStarted && !gameSortaStarted;
-
-  nitroFX.group.visible = usingNitro;
-
-  // slight FOV kick
-  if (camera) {
-    var targetFov = nitroFX.baseFov + (usingNitro ? 10 : 0);
-    camera.fov += (targetFov - camera.fov) * clamp(0.12 * warp, 0, 1);
-    camera.updateProjectionMatrix();
-  }
-
-  if (!usingNitro) return;
-
-  // follow car (NO parenting; safest for multiplayer swaps)
-  nitroFX.group.position.copy(me.model.position);
-  nitroFX.group.rotation.copy(me.model.rotation);
-
-  var t = ts * 0.001;
-
-  // place flames behind car
-  var leftNozzle  = new THREE.Vector3(-0.45, 0.45, -1.7);
-  var rightNozzle = new THREE.Vector3( 0.45, 0.45, -1.7);
-
-  for (var i = 0; i < nitroFX.flames.length; i++) {
-    var f = nitroFX.flames[i];
-    var off = (i === 0) ? leftNozzle : rightNozzle;
-
-    f.position.copy(off);
-
-    var flick = 0.75 + 0.25 * Math.sin(t * 28 + i * 2.1);
-    f.scale.set(1, flick, 1);
-    f.material.opacity = 0.55 + 0.35 * flick;
-    f.material.emissiveIntensity = 1.6 + 1.4 * flick;
-  }
-
-  // streaks
-  var speed = Math.sqrt((me.data.xv || 0) * (me.data.xv || 0) + (me.data.yv || 0) * (me.data.yv || 0));
-
-  for (var s = 0; s < nitroFX.streaks.length; s++) {
-    var st = nitroFX.streaks[s];
-
-    st.life -= 0.035 * warp * (1 + speed * 2);
-    if (st.life <= 0) {
-      st.life = 1;
-      st.xOff = (Math.random() * 2 - 1) * 2.0;
-      st.zOff = -Math.random() * 14 - 3;
-
-      st.mesh.position.set(st.xOff, 0.03, st.zOff);
-      st.mesh.scale.set(1, 1, 1);
-    } else {
-      st.mesh.position.z += (0.25 + speed * 5) * warp;
-      st.mesh.position.x *= Math.pow(0.985, warp);
-
-      st.mesh.material.opacity = st.life * 0.22;
-
-      var yScale = 1 + speed * 3;
-      st.mesh.scale.set(1, yScale, 1);
-    }
-  }
-}
 
 // ====== Map physics data ======
 var wallSegs = [];  // {a:V2,b:V2,dir:V2,len2:number,mesh:Mesh}
@@ -408,35 +287,36 @@ function ensureEngine() {
     document.body.appendChild(lapEl);
   }
 
-  if (!document.getElementById("nitrobar")) {
-    var nb = makeDiv("nitrobar", "", "");
-    nb.style.position = "fixed";
-    nb.style.bottom = "18px";
-    nb.style.left = "50%";
-    nb.style.transform = "translateX(-50%)";
-    nb.style.width = "260px";
-    nb.style.height = "14px";
-    nb.style.background = "rgba(0,0,0,.45)";
-    nb.style.border = "2px solid white";
-    nb.style.borderRadius = "6px";
-    nb.style.zIndex = "5";
-
-    var fill = makeDiv("nitrofill", "", "");
-    fill.style.height = "100%";
-    fill.style.width = "100%";
-    fill.style.background = "#00c8ff";
-    fill.style.transition = "width .08s linear";
-
-    nb.appendChild(fill);
-    document.body.appendChild(nb);
-  }
-
+  // Player label style
   if (!document.getElementById("pLabelStyle")) {
     var st = document.createElement("style");
     st.id = "pLabelStyle";
     st.textContent =
       ".pLabel{position:fixed;transform:translate(-50%,-100%);color:#fff;font-family:'Press Start 2P',monospace;font-size:12px;pointer-events:none;text-shadow:0 2px 0 rgba(0,0,0,.55);z-index:4;white-space:nowrap;}";
     document.head.appendChild(st);
+  }
+
+  // Nitro UI style (prettier + only visible when active)
+  if (!document.getElementById("nitroStyle")) {
+    var ns = document.createElement("style");
+    ns.id = "nitroStyle";
+    ns.textContent =
+      "#nitrobar{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) scale(.94);width:280px;height:14px;" +
+      "background:rgba(0,0,0,.40);border:2px solid rgba(255,255,255,.95);border-radius:999px;z-index:5;" +
+      "opacity:0;pointer-events:none;transition:opacity .16s ease, transform .16s ease, filter .16s ease;filter:blur(.0px)}" +
+      "#nitrobar.active{opacity:1;transform:translateX(-50%) scale(1);filter:drop-shadow(0 0 10px rgba(0,229,255,.55))}" +
+      "#nitrofill{height:100%;width:0%;border-radius:999px;" +
+      "background:linear-gradient(90deg, rgba(0,229,255,1) 0%, rgba(57,255,136,1) 60%, rgba(255,255,255,1) 100%);" +
+      "box-shadow:0 0 10px rgba(0,229,255,.35);transition:width .08s linear}";
+    document.head.appendChild(ns);
+  }
+
+  // Nitro bar element
+  if (!document.getElementById("nitrobar")) {
+    var nb = makeDiv("nitrobar", "", "");
+    var fill = makeDiv("nitrofill", "", "");
+    nb.appendChild(fill);
+    document.body.appendChild(nb);
   }
 
   window.addEventListener("resize", onResize, false);
@@ -547,9 +427,9 @@ function buildMapFromTrackCode(track) {
     h = Math.max(h, 120);
 
     ground.geometry.dispose();
-    var gGeo = new THREE.PlaneGeometry(w, h);
-    gGeo.rotateX(-Math.PI / 2);
-    ground.geometry = gGeo;
+    var ng = new THREE.PlaneGeometry(w, h);
+    ng.rotateX(-Math.PI / 2);
+    ground.geometry = ng;
     ground.position.set((minX + maxX) / 2, 0, (minY + maxY) / 2);
   } else {
     ground.position.set(0, 0, 0);
@@ -796,6 +676,35 @@ function makeCar(hexColor) {
   box(body, 0.10, 0.02, 2.40, whiteMat, 0, 0.16, 0.10);
   box(body, 0.55, 0.02, 0.50, whiteMat, 0, 0.16, -1.25);
 
+  // ===== Slipstream FX (attach under BODY so top-level child indices stay the same) =====
+  (function addSlipFX() {
+    var slip = new THREE.Group();
+    slip.name = "slipfx";
+    slip.visible = false;
+
+    var geo = new THREE.PlaneGeometry(0.10, 6.0);
+    geo.rotateX(-Math.PI / 2);
+
+    function lineMesh(x) {
+      var mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false
+      });
+      mat.blending = THREE.AdditiveBlending;
+
+      var mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, -0.52, -3.8);
+      mesh.renderOrder = 9999;
+      return mesh;
+    }
+
+    slip.add(lineMesh(-0.35));
+    slip.add(lineMesh(0.35));
+    body.add(slip);
+  })();
+
   // ===== (CHILD 1) Cabin mesh (kept second to preserve indices) =====
   var cabin = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.20, 0.90), glassMat);
   cabin.castShadow = true;
@@ -822,7 +731,7 @@ function makeCar(hexColor) {
     var g = new THREE.CylinderGeometry(radius, radius, thickness, 18);
     var m = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 1, metalness: 0.02 });
     var w = new THREE.Mesh(g, m);
-    w.rotation.z = Math.PI / 2; // base; your steering code overwrites this each frame for front wheels
+    w.rotation.z = Math.PI / 2;
     w.castShadow = true;
     w.receiveShadow = true;
 
@@ -849,7 +758,7 @@ function makeCar(hexColor) {
     return w;
   }
 
-  // Wheel positions (tuned for F1 proportions)
+  // Wheel positions
   var FL = { x: -1.08, y: 0.36, z: 1.52 };
   var FR = { x:  1.08, y: 0.36, z: 1.52 };
   var BL = { x: -1.08, y: 0.40, z: -1.32 };
@@ -876,7 +785,6 @@ function makeCar(hexColor) {
   car.add(backRight);
 
   // ===== Suspension arms (attach to BODY so they don't affect top-level indices) =====
-  // Convert wheel positions into BODY-local coordinates (body is at y=0.55, x/z=0)
   function toBodyLocal(p) { return { x: p.x, y: p.y - 0.55, z: p.z }; }
 
   var fl = toBodyLocal(FL), fr = toBodyLocal(FR), bl = toBodyLocal(BL), br = toBodyLocal(BR);
@@ -894,17 +802,12 @@ function makeCar(hexColor) {
   strut(body,  0.32, -0.10, -1.05, br.x * 0.92, br.y - 0.06, br.z + 0.05, 0.03, carbonMat);
 
   // ===== Small aero bits =====
-  // Front canards
   box(body, 0.22, 0.03, 0.20, carbonMat, -0.52, 0.05, 1.40, 0, 0.25, 0);
   box(body, 0.22, 0.03, 0.20, carbonMat,  0.52, 0.05, 1.40, 0, -0.25, 0);
-
-  // Rear camera pod / fin cap
   box(body, 0.08, 0.08, 0.08, carbonMat, 0, 0.52, -1.50);
 
   return car;
 }
-
-
 
 function makeLabel(name) {
   var el = document.createElement("div");
@@ -924,6 +827,101 @@ function projectToScreen(pos3) {
   return { x: x, y: y, visible: visible };
 }
 
+// ====== Slipstream helpers + visuals ======
+function getSlipFX(model) {
+  if (!model) return null;
+  if (model._slipfxCached !== undefined) return model._slipfxCached;
+
+  var body = model.children && model.children[0];
+  if (!body) { model._slipfxCached = null; return null; }
+
+  var fx = body.getObjectByName("slipfx");
+  model._slipfxCached = fx || null;
+  return model._slipfxCached;
+}
+
+function setSlipFX(model, factor, ts) {
+  var fx = getSlipFX(model);
+  if (!fx) return;
+
+  if (factor <= 0.02) {
+    fx.visible = false;
+    return;
+  }
+
+  fx.visible = true;
+
+  var pulse = 0.70 + 0.30 * Math.sin(ts * 0.02);
+  var op = clamp((0.20 + 0.65 * factor) * pulse, 0, 0.90);
+  var stretch = 0.85 + factor * 0.65;
+
+  for (var i = 0; i < fx.children.length; i++) {
+    var m = fx.children[i];
+    if (!m || !m.material) continue;
+    m.material.opacity = op;
+    m.scale.z = stretch;
+  }
+}
+
+function computeSlipstreamForMe() {
+  var bestKey = null;
+  var best = 0;
+
+  if (!me || !me.data) return { key: null, factor: 0 };
+
+  var myPos = vec2(me.data.x, me.data.y);
+
+  for (var k in players) {
+    if (!players.hasOwnProperty(k)) continue;
+    if (k === meKey) continue;
+
+    var p = players[k];
+    if (!p || !p.data) continue;
+
+    var ox = p.data.x || 0;
+    var oy = p.data.y || 0;
+    var od = p.data.dir || 0;
+
+    var oPos = vec2(ox, oy);
+    var dVec = myPos.clone().sub(oPos); // from other -> me
+    var dist = dVec.length();
+    if (dist < 0.001 || dist > SLIP_DIST) continue;
+
+    var fwd = vec2(Math.sin(od), Math.cos(od)); // their forward in world
+    var along = dVec.dot(fwd);                  // + means I'm in front of them
+    if (along > -0.25) continue;                // must be behind them
+
+    // lateral distance from their centerline
+    var proj = fwd.clone().multiplyScalar(along);
+    var lateral = dVec.clone().sub(proj).length();
+    if (lateral > SLIP_WIDTH) continue;
+
+    var distFactor = clamp((SLIP_DIST - dist) / SLIP_DIST, 0, 1);
+    var latFactor = clamp((SLIP_WIDTH - lateral) / SLIP_WIDTH, 0, 1);
+
+    // emphasize being centered
+    var factor = distFactor * (latFactor * latFactor);
+
+    if (factor > best) {
+      best = factor;
+      bestKey = k;
+    }
+  }
+
+  return { key: bestKey, factor: best };
+}
+
+function updateSlipstreamVisuals(ts) {
+  for (var k in players) {
+    if (!players.hasOwnProperty(k)) continue;
+    var p = players[k];
+    if (!p || !p.model) continue;
+
+    if (k === slipTargetKey) setSlipFX(p.model, slipFactor, ts);
+    else setSlipFX(p.model, 0, ts);
+  }
+}
+
 // ====== Input ======
 function setupInputOnce() {
   if (setupInputOnce._did) return;
@@ -935,7 +933,14 @@ function setupInputOnce() {
     if (k === "ArrowRight" || k === "d" || k === "D") right = true;
     if (k === "ArrowUp" || k === "w" || k === "W") up = true;
     if (k === "ArrowDown" || k === "s" || k === "S") down = true;
-    if (k === "Shift") nitro = true;
+
+    if (k === "Shift") {
+      // edge-trigger: only arm on fresh press
+      if (!nitro) {
+        if (!nitroLock && nitroFuel > 0.5) nitroArmed = true;
+      }
+      nitro = true;
+    }
   });
 
   window.addEventListener("keyup", function (e) {
@@ -944,7 +949,13 @@ function setupInputOnce() {
     if (k === "ArrowRight" || k === "d" || k === "D") right = false;
     if (k === "ArrowUp" || k === "w" || k === "W") up = false;
     if (k === "ArrowDown" || k === "s" || k === "S") down = false;
-    if (k === "Shift") nitro = false;
+
+    if (k === "Shift") {
+      nitro = false;
+      nitroArmed = false;
+      nitroLock = false; // unlock once released
+      nitroActive = false;
+    }
   });
 
   function updateTouch(touches) {
@@ -1412,7 +1423,7 @@ function startGame() {
   safeRemove(document.getElementById("startgame"));
 
   showOverlayMsg("");
-  startCountdown(function () {});
+  startCountdown(function () { });
 
   setTimeout(function () { playerCollisionEnabled = true; }, 5000);
 }
@@ -1494,6 +1505,12 @@ function collideWithPlayers() {
 function updateMePhysics(warp) {
   if (!me || !me.data || !me.model) return;
 
+  // Slipstream (compute once per frame)
+  var slip = computeSlipstreamForMe();
+  slipTargetKey = slip.key;
+  slipFactor = slip.factor;
+
+  // Steering input
   if (!mobile) {
     if (left) me.data.steer = Math.PI / 6;
     if (right) me.data.steer = -Math.PI / 6;
@@ -1505,18 +1522,45 @@ function updateMePhysics(warp) {
   me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
 
   var brake = down ? 0.82 : 1.0;
-  var usingNitro = nitro && nitroFuel > 0;
 
+  // Nitro: only active if held AND armed on press AND has fuel AND not locked
+  var usingNitro = (nitro && nitroArmed && !nitroLock && nitroFuel > 0.01);
+  nitroActive = usingNitro;
+
+  // Drain/regenerate fuel
+  if (usingNitro) {
+    nitroFuel -= NITRO_DRAIN * warp * 0.016;
+    if (nitroFuel <= 0) {
+      nitroFuel = 0;
+      nitroArmed = false;
+      nitroLock = true;   // lock until Shift released
+      nitroActive = false;
+      usingNitro = false;
+    }
+  } else {
+    nitroFuel += NITRO_REGEN * warp * 0.016;
+  }
+  nitroFuel = clamp(nitroFuel, 0, NITRO_MAX);
+
+  // Base tuning
   var ACCEL = SPEED * (usingNitro ? 5.0 : 2.0);
   var FRICTION = 0.965;
   var DRAG = 0.992;
 
+  // Slipstream bonuses
+  if (slipFactor > 0.001) {
+    ACCEL *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
+    DRAG = Math.min(0.999, DRAG + SLIP_DRAG_REDUCE * slipFactor);
+
+    // A small forward pull so you actually gain while drafting
+    if (!down) {
+      me.data.xv += Math.sin(me.data.dir) * (SPEED * SLIP_PUSH) * slipFactor * warp;
+      me.data.yv += Math.cos(me.data.dir) * (SPEED * SLIP_PUSH) * slipFactor * warp;
+    }
+  }
+
   var REVERSE_ACCEL = ACCEL * 2.3;
   var MAX_REVERSE = MAX_SPEED * 0.45;
-
-  if (usingNitro) nitroFuel -= NITRO_DRAIN * warp * 0.016;
-  else nitroFuel += NITRO_REGEN * warp * 0.016;
-  nitroFuel = clamp(nitroFuel, 0, NITRO_MAX);
 
   if (up) {
     me.data.xv += Math.sin(me.data.dir) * ACCEL * warp;
@@ -1538,6 +1582,11 @@ function updateMePhysics(warp) {
     me.data.yv * Math.cos(me.data.dir);
 
   var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
+
+  // Slipstream increases top speed too
+  if (slipFactor > 0.001) {
+    topSpeed *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
+  }
 
   if (forwardSpeed > topSpeed) {
     var s1 = topSpeed / forwardSpeed;
@@ -1563,6 +1612,10 @@ function updateMePhysics(warp) {
     me.data.xv = 0;
     me.data.yv = 0;
     me.data.dir = spawnDir;
+
+    nitroArmed = false;
+    nitroLock = false;
+    nitroActive = false;
   }
 
   me.model.position.x = me.data.x;
@@ -1715,13 +1768,19 @@ function maybeSendToFirebase(ts) {
   me.ref.set(me.data);
 }
 
-// ====== Main loop ======
+// ====== Nitro UI ======
 function updateNitroUI() {
+  var barEl = document.getElementById("nitrobar");
   var fillEl = document.getElementById("nitrofill");
-  if (!fillEl) return;
+  if (!barEl || !fillEl) return;
+
+  if (nitroActive) barEl.classList.add("active");
+  else barEl.classList.remove("active");
+
   fillEl.style.width = ((nitroFuel / NITRO_MAX) * 100) + "%";
 }
 
+// ====== Main loop ======
 var lastTime = 0;
 function renderLoop(ts) {
   requestAnimationFrame(renderLoop);
@@ -1736,6 +1795,7 @@ function renderLoop(ts) {
   if (gameStarted && me) {
     if (!gameSortaStarted) updateMePhysics(warp);
     updateRemoteVisuals(warp);
+    updateSlipstreamVisuals(ts);
     updateCamera(warp);
     updateHud();
     updateNitroUI();
@@ -1745,10 +1805,14 @@ function renderLoop(ts) {
     camera.position.set(50 * Math.sin(a), 20, 50 * Math.cos(a));
     camera.lookAt(new THREE.Vector3(0, 0, 0));
     updateRemoteVisuals(warp);
+    // no drafting visuals pre-start
+    slipTargetKey = null;
+    slipFactor = 0;
+    updateSlipstreamVisuals(ts);
+    updateNitroUI();
   }
 
   updateLabels();
-  updateNitroFX(ts, warp);
   renderer.render(scene, camera);
   MODS();
 }
@@ -1756,7 +1820,6 @@ function renderLoop(ts) {
 // ====== Init ======
 function init() {
   ensureEngine();
-  initNitroFX();
   if (foreEl) foreEl.style.pointerEvents = "auto";
 
   setupToolbarOnce();
