@@ -416,6 +416,37 @@ function buildMapFromTrackCode(track) {
   }
 
   var parts = track.split("|");
+ // ===== SPAWN (5th section: parts[4]) =====
+var spawnText = (parts[4] || "").trim();
+if (spawnText.length) {
+  var sp = spawnText.split("/");
+  var pos = sp[0].split(",");
+  var sx = parseFloat(pos[0]);
+  var sy = parseFloat(pos[1]);
+  var deg = parseFloat(sp[1] || "0");
+
+  // Map format exports Y inverted already, so most games use z = -sy.
+  var spawnX = sx;
+  var spawnZ = -sy;
+
+  // Heading degrees -> radians
+  var yaw = deg * Math.PI / 180;
+
+  // --- APPLY POSITION ---
+  // Replace these two lines if your game uses different names (car.pos.x, player.x, etc.)
+  car.x = spawnX;
+  car.z = spawnZ;
+
+  // --- APPLY ORIENTATION ---
+  // Replace this if your game stores rotation differently (car.angle, car.rot, body.yaw, etc.)
+  car.angle = yaw;
+
+  // --- PUSH BACK so you spawn BEHIND the line, not on the wrong side ---
+  // Increase 0.8 if you still spawn too far forward.
+  car.x -= Math.cos(yaw) * 0.8;
+  car.z -= Math.sin(yaw) * 0.8;
+}
+
   var wallsPart = (parts[0] || "").trim();
   var checkPart = (parts[1] || "").trim();
   var treesPart = (parts[2] || "").trim();
