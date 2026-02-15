@@ -1734,13 +1734,31 @@ function handleCheckpoints() {
 // ====== Physics + game loop ======
 function updateMePhysics(warp, dtSec) {
   if (!me || !me.data || !me.model) return;
+function updateCamera(warp) {
+  if (!me || !me.model) return;
 
-  // Slipstream
-  var slip = computeSlipstreamForMe();
-  slipTargetKey = slip.key;
-  slipFactor = slip.factor;
+  // Nice boost feel: slightly widen FOV only when boost is actually active
+  var targetFov = nitroActive ? BOOST_FOV : BASE_FOV;
+  camera.fov = camera.fov * 0.88 + targetFov * 0.12;
+  camera.updateProjectionMatrix();
 
-  // Steering input
+  var target = new THREE.Vector3(
+    me.model.position.x + Math.sin(-me.model.rotation.y) * 5,
+    CAM_HEIGHT,
+    me.model.position.z + -Math.cos(-me.model.rotation.y) * 5
+  );
+
+  var lagPow = Math.pow(CAMERA_LAG, warp);
+  camera.position.set(
+    camera.position.x * lagPow + target.x * (1 - lagPow),
+    CAM_HEIGHT,
+    camera.position.z * lagPow + target.z * (1 - lagPow)
+  );
+
+  camera.lookAt(me.model.position);
+}
+
+  // ===== Steering input =====
   if (!mobile) {
     if (left) me.data.steer = Math.PI / 6;
     if (right) me.data.steer = -Math.PI / 6;
@@ -1749,14 +1767,34 @@ function updateMePhysics(warp, dtSec) {
   me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
 
   var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-  me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
 
+  // Forward-speed along car facing
+  var forwardSpeed =
+    me.data.xv * Math.sin(me.data.dir) +
+    me.data.yv * Math.cos(me.data.dir);
+
+  // Reverse steering behavior (rear swings when reversing)
+  var steerDir = forwardSpeed >= 0 ? 1 : -1;
+
+  // Scale steering with speed
+  var steerScale = Math.max(0.25, Math.abs(forwardSpeed) / MAX_SPEED);
+
+  me.data.dir +=
+    me.data.steer *
+    steerDir *
+    steerScale *
+    (STEER_MIN + speedMag * STEER_SPEED) *
+    warp;
+
+  // ===== Slipstream (after steering is applied) =====
+  var slip = computeSlipstreamForMe();
+  slipTargetKey = slip.key;
+  slipFactor = slip.factor;
+
+  // ===== Brake =====
   var brake = down ? 0.82 : 1.0;
 
-  // Nitro logic (your spec):
-  // - Only boost when fresh-pressed (armed), held, not locked, and has fuel
-  // - If fuel reaches 0 while still holding Shift -> lock boost, start recharging immediately
-  // - Must release Shift and press again to boost again
+  // ===== Nitro logic (edge-trigger + lockout) =====
   var usingNitro = (nitro && nitroArmed && !nitroLock && nitroFuel > 0.01);
   nitroActive = usingNitro;
 
@@ -1775,12 +1813,12 @@ function updateMePhysics(warp, dtSec) {
   }
   nitroFuel = clamp(nitroFuel, 0, NITRO_MAX);
 
-  // Base tuning
-  var ACCEL = SPEED * (usingNitro ? 5.0 : 2.0);
+  // ===== Base tuning =====
+  var ACCEL = SPEED * 2.0 * (usingNitro ? NITRO_MULT : 1.0);
   var FRICTION = 0.965;
   var DRAG = 0.992;
 
-  // Slipstream bonuses
+  // ===== Slipstream bonuses =====
   if (slipFactor > 0.001) {
     ACCEL *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
     DRAG = Math.min(0.999, DRAG + SLIP_DRAG_REDUCE * slipFactor);
@@ -1794,6 +1832,7 @@ function updateMePhysics(warp, dtSec) {
   var REVERSE_ACCEL = ACCEL * 2.3;
   var MAX_REVERSE = MAX_SPEED * 0.45;
 
+  // ===== Apply throttle =====
   if (up) {
     me.data.xv += Math.sin(me.data.dir) * ACCEL * warp;
     me.data.yv += Math.cos(me.data.dir) * ACCEL * warp;
@@ -1803,16 +1842,19 @@ function updateMePhysics(warp, dtSec) {
     me.data.yv -= Math.cos(me.data.dir) * REVERSE_ACCEL * warp;
   }
 
+  // ===== Damping =====
   me.data.xv *= Math.pow(FRICTION, warp);
   me.data.yv *= Math.pow(FRICTION, warp);
 
   me.data.xv *= DRAG * brake;
   me.data.yv *= DRAG * brake;
 
-  var forwardSpeed =
+  // Recompute forwardSpeed for speed caps after changes
+  forwardSpeed =
     me.data.xv * Math.sin(me.data.dir) +
     me.data.yv * Math.cos(me.data.dir);
 
+  // ===== Speed caps =====
   var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
   if (slipFactor > 0.001) topSpeed *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
 
@@ -1827,15 +1869,16 @@ function updateMePhysics(warp, dtSec) {
     me.data.yv *= s2;
   }
 
+  // ===== Integrate position =====
   me.data.x += me.data.xv * warp;
   me.data.y += me.data.yv * warp;
 
-  // Rectangle wall collision (replaces old circle hitbox)
+  // ===== Collisions / checkpoints =====
   collideMeWithWallsRect();
   collideWithPlayers();
-
   handleCheckpoints();
 
+  // ===== Out of bounds reset =====
   if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
     me.data.x = spawnX;
     me.data.y = spawnY;
@@ -1848,15 +1891,19 @@ function updateMePhysics(warp, dtSec) {
     nitroActive = false;
   }
 
+  // ===== Apply to model =====
   me.model.position.x = me.data.x;
   me.model.position.z = me.data.y;
   me.model.rotation.y = me.data.dir;
 
+  // front wheels steer visually
   if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
   if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
 }
 
-function updateCamera(warp) {
+
+
+
   if (!me || !me.model) return;
 
   // Nice boost feel: slightly widen FOV only when boost is actually active
