@@ -565,7 +565,9 @@ function addTree(x, y) {
 
 function computeSpawn() {
   if (!cpSegs.length) {
-    spawnX = 0; spawnY = 0; spawnDir = 0;
+    spawnX = 0;
+    spawnY = 0;
+    spawnDir = 0;
     return;
   }
 
@@ -578,12 +580,11 @@ function computeSpawn() {
     if (v.dot(forward) < 0) forward.multiplyScalar(-1);
   }
 
- spawnX = start.mid.x + forward.x * 5;
-spawnY = start.mid.y + forward.y * 5;
-
-
+  spawnX = start.mid.x + forward.x * 5;
+  spawnY = start.mid.y + forward.y * 5;
   spawnDir = Math.atan2(forward.y, forward.x);
 }
+
 
 
 // ====== Cars + labels ======
