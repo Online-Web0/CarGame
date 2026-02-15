@@ -333,40 +333,56 @@ function imp(){
 function exp(){
 	var text = "";
 
+	// ---- walls ----
 	for (var i = 0; i < walls.length; i++){
-		text += walls[i].start.x - Math.floor(width / scale / 2) + ",";
-		text += -1 * (walls[i].start.y - Math.floor(height / scale / 2)) + "/";
-		text += walls[i].end.x - Math.floor(width / scale / 2) + ",";
-		text += -1 * (walls[i].end.y - Math.floor(height / scale / 2)) + " ";
+		text += (walls[i].start.x - Math.floor(width / scale / 2)) + ",";
+		text += (-1 * (walls[i].start.y - Math.floor(height / scale / 2))) + "/";
+		text += (walls[i].end.x - Math.floor(width / scale / 2)) + ",";
+		text += (-1 * (walls[i].end.y - Math.floor(height / scale / 2))) + " ";
 	}
 
 	text += "|";
 
+	// ---- start lines ----
 	for (var i = 0; i < start.length; i++){
-		text += start[i].start.x - Math.floor(width / scale / 2) + ",";
-		text += -1 * (start[i].start.y - Math.floor(height / scale / 2)) + "/";
-		text += start[i].end.x - Math.floor(width / scale / 2) + ",";
-		text += -1 * (start[i].end.y - Math.floor(height / scale / 2)) + " ";
+		text += (start[i].start.x - Math.floor(width / scale / 2)) + ",";
+		text += (-1 * (start[i].start.y - Math.floor(height / scale / 2))) + "/";
+		text += (start[i].end.x - Math.floor(width / scale / 2)) + ",";
+		text += (-1 * (start[i].end.y - Math.floor(height / scale / 2))) + " ";
 	}
 
 	text += "|";
 
+	// ---- trees ----
 	for (var i = 0; i < trees.length; i++){
-		text += trees[i].x - Math.floor(width / scale / 2) + ",";
-		text += -1 * (trees[i].y - Math.floor(height / scale / 2)) + " ";
+		text += (trees[i].x - Math.floor(width / scale / 2)) + ",";
+		text += (-1 * (trees[i].y - Math.floor(height / scale / 2))) + " ";
 	}
 
 	text += "|";
 
+	// ---- arrows ----
 	for (var i = 0; i < arrows.length; i++){
-		text += arrows[i].x - Math.floor(width / scale / 2) + ",3,";
-		text += -1 * (arrows[i].y - Math.floor(height / scale / 2)) + "/";
+		text += (arrows[i].x - Math.floor(width / scale / 2)) + ",3,";
+		text += (-1 * (arrows[i].y - Math.floor(height / scale / 2))) + "/";
 		text += Math.floor(90 - arrows[i].angle * 180 / Math.PI) + " ";
 	}
 
+	// ---- spawn (THIS is what you were missing) ----
+	text += "|";
+	text += (spawn.x - Math.floor(width / scale / 2)) + ",";
+	text += (-1 * (spawn.y - Math.floor(height / scale / 2))) + "/";
+
+	// convert editor angle -> game heading degrees
+	var spawnDirDeg = Math.round(((Math.PI / 2) - spawn.angle) * 180 / Math.PI);
+	spawnDirDeg = ((spawnDirDeg % 360) + 360) % 360; // keep 0..359
+	text += spawnDirDeg;
+
+	// show text safely
 	var win = window.open();
-	win.document.body.innerText = text; // IMPORTANT: not innerHTML
+	win.document.body.innerText = text;
 }
+
 
 // ===== Undo / Erase =====
 document.body.onkeydown = function(e){
