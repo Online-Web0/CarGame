@@ -3,33 +3,40 @@
 // ====== TUNING (your values kept) ======
 var SPEED = .016;
 var CAMERA_LAG = 0.82;
-var COLLISION = 1.1;        // kept (used only for optional player collisions)
+var COLLISION = 1.1;
 var BOUNCE = 1.25;
 var mapscale = 500;
 var VR = false;
 var BOUNCE_CORRECT = 0.01;
-var WALL_SIZE = 1.2;
+var WALL_SIZE = 1.2;      // used as wall "thickness" margin for collision
 var MOUNTAIN_DIST = 2500;
 var OOB_DIST = 2000;
 var LAPS = 3;
 var NITRO_MULT = 2.0;
 
+// ====== Nitro tuning ======
 var NITRO_MAX = 100;
 var nitroFuel = NITRO_MAX;
-var NITRO_DRAIN = 45;   // per second
-var NITRO_REGEN = 13;   // per second
+var NITRO_DRAIN = 45;   // per second (scaled by dt)
+var NITRO_REGEN = 13;   // per second (scaled by dt)
 
-// New tuning
+// ====== Movement tuning ======
 var MAX_SPEED = 0.30;
 var STEER_MIN = 0.05;
 var STEER_SPEED = 0.12;
 var CAM_HEIGHT = 4;
 
+// ====== Car hitbox (rectangle) ======
+// These are half-extents in WORLD UNITS (tweak if your model looks off).
+// width ~ 2.2 => halfWidth 1.10, length ~ 4.1 => halfLength 2.05
+var CAR_HALF_WIDTH = 1.10;
+var CAR_HALF_LENGTH = 2.05;
+
 function MODS() {}
 
 // ====== Nitro input/state (edge-trigger + lockout) ======
-var nitro = false;          // Shift currently held (key-down)
-var nitroArmed = false;     // armed on a fresh press
+var nitro = false;          // Shift currently held
+var nitroArmed = false;     // set true on a fresh Shift press
 var nitroLock = false;      // locks after fuel hits 0 until Shift released
 var nitroActive = false;    // true only while boost actually applies
 
@@ -38,14 +45,13 @@ var SLIP_DIST = 11.0;            // max distance behind a car to draft
 var SLIP_WIDTH = 2.2;            // max lateral offset from their centerline
 var SLIP_ACCEL_BONUS = 0.70;     // accel multiplier bonus (0.70 => up to +70%)
 var SLIP_TOPSPEED_BONUS = 0.22;  // top speed bonus (0.22 => up to +22%)
-var SLIP_DRAG_REDUCE = 0.007;    // added to DRAG (reduces drag) while drafting
-var SLIP_PUSH = 0.90;            // small forward “pull” while drafting
+var SLIP_DRAG_REDUCE = 0.007;    // drag reduction while drafting
+var SLIP_PUSH = 0.90;            // small forward pull
 
-var slipTargetKey = null;        // which player I'm drafting (for visuals)
-var slipFactor = 0;              // 0..1 drafting strength
+var slipTargetKey = null;
+var slipFactor = 0;
 
 // ====== Firebase connection ======
-// NOTE: This assumes firebase scripts are already loaded in index.html
 var database = null;
 try {
   var firebaseConfig = {
@@ -92,8 +98,8 @@ var players = {};   // key -> {key, data, model, label, ref, isMe}
 var meKey = null;
 var me = null;
 
-var gameStarted = false;      // true after room start signal (or solo start)
-var gameSortaStarted = false; // countdown freeze
+var gameStarted = false;
+var gameSortaStarted = false;
 var playerCollisionEnabled = false;
 
 // ====== Input state ======
@@ -108,7 +114,7 @@ var foreEl, titleEl, startEl, nameEl, pickerEl, sliderEl, countdownEl, lapEl, se
 var modeWrapEl = null;
 var overlayMsgEl = null;
 
-// Global color (index.html expects it)
+// Global color
 var color = "#ff3030";
 
 // ====== Utility ======
@@ -139,10 +145,9 @@ function segClosestPoint(p, a, b) {
   return a.clone().add(ab.multiplyScalar(t));
 }
 
-var MIRROR_X = false; // mirror short-ways (left↔right)
+var MIRROR_X = false;
 
 // Editor token "x,y" -> game Vector2(x, z)
-// Game uses x = east/west, y = north/south (stored as .y then used as model.position.z)
 function parseV2(tok) {
   var parts = tok.split(",");
   if (parts.length !== 2) return null;
@@ -152,7 +157,7 @@ function parseV2(tok) {
   if (!isFinite(x) || !isFinite(y)) return null;
 
   if (MIRROR_X) x = -x;
-  return vec2(x, -y); // flip editor Y into game axis
+  return vec2(x, -y);
 }
 
 function parseSeg(tok) {
@@ -209,6 +214,9 @@ function hideAllMenusForGameplay() {
 }
 
 // ====== Engine init ======
+var BASE_FOV = 90;
+var BOOST_FOV = 100;
+
 function ensureEngine() {
   if (scene && renderer && mapGroup && cpGroup) return;
 
@@ -235,7 +243,7 @@ function ensureEngine() {
   scene.add(cpGroup);
   scene.add(decoGroup);
 
-  // Ground (resized after loading map)
+  // Ground
   var gGeo = new THREE.PlaneGeometry(300, 300);
   gGeo.rotateX(-Math.PI / 2);
   var gMat = new THREE.MeshStandardMaterial({ color: 0x4aa85e, roughness: 1 });
@@ -243,7 +251,7 @@ function ensureEngine() {
   ground.receiveShadow = true;
   scene.add(ground);
 
-  camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 1, 2000);
+  camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 1, 2000);
   camera.position.set(0, CAM_HEIGHT, 10);
   scene.add(camera);
 
@@ -296,27 +304,32 @@ function ensureEngine() {
     document.head.appendChild(st);
   }
 
-  // Nitro UI style (prettier + only visible when active)
+  // Nitro UI style (ALWAYS visible, only glows when actually boosting)
   if (!document.getElementById("nitroStyle")) {
     var ns = document.createElement("style");
     ns.id = "nitroStyle";
     ns.textContent =
-      "#nitrobar{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) scale(.94);width:280px;height:14px;" +
-      "background:rgba(0,0,0,.40);border:2px solid rgba(255,255,255,.95);border-radius:999px;z-index:5;" +
-      "opacity:0;pointer-events:none;transition:opacity .16s ease, transform .16s ease, filter .16s ease;filter:blur(.0px)}" +
-      "#nitrobar.active{opacity:1;transform:translateX(-50%) scale(1);filter:drop-shadow(0 0 10px rgba(0,229,255,.55))}" +
+      "#nitrobar{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);width:300px;height:14px;" +
+      "background:rgba(0,0,0,.35);border:2px solid rgba(255,255,255,.95);border-radius:999px;z-index:5;" +
+      "opacity:1;pointer-events:none;transition:filter .15s ease, transform .15s ease;}" +
+      "#nitrobar.active{transform:translateX(-50%) scale(1.02);filter:drop-shadow(0 0 12px rgba(0,229,255,.65))}" +
       "#nitrofill{height:100%;width:0%;border-radius:999px;" +
-      "background:linear-gradient(90deg, rgba(0,229,255,1) 0%, rgba(57,255,136,1) 60%, rgba(255,255,255,1) 100%);" +
-      "box-shadow:0 0 10px rgba(0,229,255,.35);transition:width .08s linear}";
+      "background:linear-gradient(90deg, rgba(0,229,255,1) 0%, rgba(57,255,136,1) 55%, rgba(255,255,255,1) 100%);" +
+      "box-shadow:0 0 8px rgba(0,229,255,.28);transition:width .08s linear}" +
+      "#nitrolabel{position:fixed;bottom:38px;left:50%;transform:translateX(-50%);" +
+      "font-family:'Press Start 2P',monospace;font-size:10px;color:rgba(255,255,255,.9);z-index:5;" +
+      "text-shadow:0 2px 0 rgba(0,0,0,.45);pointer-events:none;opacity:.85;}";
     document.head.appendChild(ns);
   }
 
-  // Nitro bar element
   if (!document.getElementById("nitrobar")) {
     var nb = makeDiv("nitrobar", "", "");
     var fill = makeDiv("nitrofill", "", "");
     nb.appendChild(fill);
     document.body.appendChild(nb);
+
+    var lbl = makeDiv("nitrolabel", "", "NITRO");
+    document.body.appendChild(lbl);
   }
 
   window.addEventListener("resize", onResize, false);
@@ -330,7 +343,7 @@ function onResize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// ====== Map build (compatible with /editor export) ======
+// ====== Map build ======
 function clearGroup(g) {
   if (!g) return;
   while (g.children.length) g.remove(g.children[0]);
@@ -354,7 +367,6 @@ function buildMapFromTrackCode(track) {
   var parts = track.split("|");
 
   // ===== SPAWN (5th section: parts[4]) =====
-  // If present, this MUST win and we MUST NOT overwrite it with computeSpawn().
   var hasSpawn = false;
   var spawnText = (parts[4] || "").trim();
   if (spawnText.length) {
@@ -370,10 +382,9 @@ function buildMapFromTrackCode(track) {
     var deg = parseFloat(sp[1] || "0");
     if (isFinite(deg)) {
       spawnDir = deg * Math.PI / 180;
-      hasSpawn = hasSpawn || true;
+      hasSpawn = true;
     }
 
-    // push back so you spawn behind the line
     spawnX -= Math.sin(spawnDir) * 0.8;
     spawnY -= Math.cos(spawnDir) * 0.8;
   }
@@ -382,7 +393,6 @@ function buildMapFromTrackCode(track) {
   var checkPart = (parts[1] || "").trim();
   var treesPart = (parts[2] || "").trim();
 
-  // collect bounds
   var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
   function includePt(p2) {
     minX = Math.min(minX, p2.x);
@@ -418,7 +428,7 @@ function buildMapFromTrackCode(track) {
     addTree(tp.x, tp.y);
   }
 
-  // resize ground to fit map with padding
+  // resize ground
   if (minX < 1e8) {
     var pad = 2000;
     var w = (maxX - minX) + pad;
@@ -435,7 +445,6 @@ function buildMapFromTrackCode(track) {
     ground.position.set(0, 0, 0);
   }
 
-  // If no explicit spawn was provided, derive it from the start/checkpoint lines
   if (!hasSpawn) computeSpawn();
 }
 
@@ -478,7 +487,6 @@ function addCheckpoint(a2, b2, isStart) {
   var mid = a.clone().add(b).multiplyScalar(0.5);
   var width = Math.sqrt(len2);
 
-  // normal to the segment
   var n = vec2(ab.y, -ab.x);
   if (n.lengthSq() < 1e-9) n = vec2(0, 1);
   n.normalize();
@@ -541,12 +549,8 @@ function computeSpawn() {
 
 // ====== Cars + labels ======
 function makeCar(hexColor) {
-  // IMPORTANT: keep top-level child order:
-  // 0 = body (mesh), 1 = cabin (mesh), 2 = frontLeft wheel, 3 = frontRight wheel, 4 = backLeft wheel, 5 = backRight wheel
-
   var car = new THREE.Object3D();
 
-  // ---- Materials ----
   var bodyMat = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.5, metalness: 0.12 });
   var carbonMat = new THREE.MeshStandardMaterial({ color: 0x0f0f10, roughness: 0.9, metalness: 0.05 });
   var darkMat = new THREE.MeshStandardMaterial({ color: 0x171717, roughness: 0.85, metalness: 0.05 });
@@ -554,7 +558,6 @@ function makeCar(hexColor) {
   var glassMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.25, metalness: 0.05, transparent: true, opacity: 0.9 });
   var whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.02 });
 
-  // ---- Helpers (all parts attach under body/cabin/wheels to keep indices stable) ----
   function addMesh(parent, mesh, x, y, z, rx, ry, rz) {
     if (x != null) mesh.position.x = x;
     if (y != null) mesh.position.y = y;
@@ -605,78 +608,60 @@ function makeCar(hexColor) {
     return m;
   }
 
-  // ===== (CHILD 0) Main body mesh =====
+  // (CHILD 0) Body
   var body = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.30, 2.85), bodyMat);
   body.castShadow = true;
   body.receiveShadow = true;
   body.position.y = 0.55;
   car.add(body);
 
-  // Floor / plank
   box(body, 1.28, 0.06, 3.55, carbonMat, 0, -0.19, 0);
-
-  // Under-nose keel
   box(body, 0.22, 0.10, 0.95, carbonMat, 0, -0.11, 1.55);
 
-  // Nose (tapered + tip)
   cyl(body, 0.12, 0.22, 1.25, 12, bodyMat, 0, -0.02, 1.65, Math.PI / 2, 0, 0);
   cyl(body, 0.06, 0.12, 0.30, 10, darkMat, 0, -0.03, 2.25, Math.PI / 2, 0, 0);
 
-  // Front wing: main plane + flap
   box(body, 2.35, 0.06, 0.42, carbonMat, 0, -0.16, 2.18);
   box(body, 2.10, 0.05, 0.26, darkMat, 0, -0.08, 2.30);
 
-  // Front wing endplates
   box(body, 0.08, 0.26, 0.46, carbonMat, -1.14, -0.03, 2.18);
   box(body, 0.08, 0.26, 0.46, carbonMat,  1.14, -0.03, 2.18);
 
-  // Front wing pylons
   box(body, 0.10, 0.18, 0.10, carbonMat, -0.24, -0.05, 2.05);
   box(body, 0.10, 0.18, 0.10, carbonMat,  0.24, -0.05, 2.05);
 
-  // Sidepods (modern-ish)
   box(body, 0.58, 0.22, 1.45, bodyMat, -0.82, -0.02, -0.15);
   box(body, 0.58, 0.22, 1.45, bodyMat,  0.82, -0.02, -0.15);
 
-  // Sidepod inlets (fake openings)
   box(body, 0.35, 0.12, 0.35, darkMat, -0.90, 0.04, 0.45);
   box(body, 0.35, 0.12, 0.35, darkMat,  0.90, 0.04, 0.45);
 
-  // Bargeboards / undercut details
   box(body, 0.10, 0.14, 0.55, carbonMat, -0.65, -0.07, 0.55);
   box(body, 0.10, 0.14, 0.55, carbonMat,  0.65, -0.07, 0.55);
 
-  // Engine cover + shark fin
   box(body, 0.55, 0.22, 1.25, bodyMat, 0, 0.12, -1.05);
-  box(body, 0.06, 0.40, 0.95, carbonMat, 0, 0.30, -1.20); // shark fin
+  box(body, 0.06, 0.40, 0.95, carbonMat, 0, 0.30, -1.20);
 
-  // Air intake (above driver)
   cyl(body, 0.16, 0.16, 0.20, 12, carbonMat, 0, 0.34, -0.35, 0, 0, 0);
   box(body, 0.28, 0.14, 0.22, darkMat, 0, 0.33, -0.35);
 
-  // Rear wing: main + flap
   box(body, 1.55, 0.09, 0.42, carbonMat, 0, 0.22, -1.92);
   box(body, 1.35, 0.06, 0.28, darkMat, 0, 0.30, -1.98);
 
-  // Rear wing endplates
   box(body, 0.08, 0.48, 0.44, carbonMat, -0.74, 0.04, -1.92);
   box(body, 0.08, 0.48, 0.44, carbonMat,  0.74, 0.04, -1.92);
 
-  // Rear wing supports
   box(body, 0.08, 0.30, 0.08, carbonMat, -0.20, 0.05, -1.72);
   box(body, 0.08, 0.30, 0.08, carbonMat,  0.20, 0.05, -1.72);
 
-  // Diffuser
   box(body, 0.92, 0.12, 0.55, darkMat, 0, -0.12, -1.82);
 
-  // Exhaust
   cyl(body, 0.06, 0.06, 0.25, 10, metalMat, 0, 0.15, -1.70, Math.PI / 2, 0, 0);
 
-  // Livery accents (simple stripes)
   box(body, 0.10, 0.02, 2.40, whiteMat, 0, 0.16, 0.10);
   box(body, 0.55, 0.02, 0.50, whiteMat, 0, 0.16, -1.25);
 
-  // ===== Slipstream FX (attach under BODY so top-level child indices stay the same) =====
+  // Slipstream FX (behind THIS car; used on the car you are drafting)
   (function addSlipFX() {
     var slip = new THREE.Group();
     slip.name = "slipfx";
@@ -705,28 +690,21 @@ function makeCar(hexColor) {
     body.add(slip);
   })();
 
-  // ===== (CHILD 1) Cabin mesh (kept second to preserve indices) =====
+  // (CHILD 1) Cabin
   var cabin = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.20, 0.90), glassMat);
   cabin.castShadow = true;
   cabin.receiveShadow = true;
   cabin.position.set(0, 0.78, 0.25);
   car.add(cabin);
 
-  // Halo
   torus(cabin, 0.28, 0.04, 10, 18, carbonMat, 0, 0.10, -0.06, Math.PI / 2, 0, 0);
-  // Halo center pillar
   box(cabin, 0.06, 0.16, 0.06, carbonMat, 0, 0.06, 0.18);
-
-  // Steering wheel
   torus(cabin, 0.12, 0.03, 8, 14, darkMat, 0, -0.02, 0.22, 0.2, 0, 0);
-  // Driver helmet
   sphere(cabin, 0.13, 12, whiteMat, 0, 0.08, 0.10);
-
-  // Mirrors
   box(cabin, 0.14, 0.05, 0.10, carbonMat, -0.45, 0.03, 0.45);
   box(cabin, 0.14, 0.05, 0.10, carbonMat,  0.45, 0.03, 0.45);
 
-  // ===== Wheels (top-level; indices matter for steering) =====
+  // Wheels (top-level; indices matter)
   function wheelMesh(radius, thickness) {
     var g = new THREE.CylinderGeometry(radius, radius, thickness, 18);
     var m = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 1, metalness: 0.02 });
@@ -735,7 +713,6 @@ function makeCar(hexColor) {
     w.castShadow = true;
     w.receiveShadow = true;
 
-    // Rim
     var rim = new THREE.Mesh(
       new THREE.CylinderGeometry(radius * 0.62, radius * 0.62, thickness + 0.02, 14),
       new THREE.MeshStandardMaterial({ color: 0x303030, roughness: 0.55, metalness: 0.25 })
@@ -743,7 +720,6 @@ function makeCar(hexColor) {
     rim.rotation.z = Math.PI / 2;
     w.add(rim);
 
-    // Brake disc + caliper (small detail)
     var disc = new THREE.Mesh(
       new THREE.CylinderGeometry(radius * 0.35, radius * 0.35, thickness + 0.03, 12),
       metalMat
@@ -758,53 +734,40 @@ function makeCar(hexColor) {
     return w;
   }
 
-  // Wheel positions
   var FL = { x: -1.08, y: 0.36, z: 1.52 };
   var FR = { x:  1.08, y: 0.36, z: 1.52 };
   var BL = { x: -1.08, y: 0.40, z: -1.32 };
   var BR = { x:  1.08, y: 0.40, z: -1.32 };
 
-  // (CHILD 2) Front-left
+  // (CHILD 2..5)
   var frontLeft = wheelMesh(0.36, 0.30);
   frontLeft.position.set(FL.x, FL.y, FL.z);
   car.add(frontLeft);
 
-  // (CHILD 3) Front-right
   var frontRight = wheelMesh(0.36, 0.30);
   frontRight.position.set(FR.x, FR.y, FR.z);
   car.add(frontRight);
 
-  // (CHILD 4) Back-left
   var backLeft = wheelMesh(0.42, 0.34);
   backLeft.position.set(BL.x, BL.y, BL.z);
   car.add(backLeft);
 
-  // (CHILD 5) Back-right
   var backRight = wheelMesh(0.42, 0.34);
   backRight.position.set(BR.x, BR.y, BR.z);
   car.add(backRight);
 
-  // ===== Suspension arms (attach to BODY so they don't affect top-level indices) =====
   function toBodyLocal(p) { return { x: p.x, y: p.y - 0.55, z: p.z }; }
-
   var fl = toBodyLocal(FL), fr = toBodyLocal(FR), bl = toBodyLocal(BL), br = toBodyLocal(BR);
 
-  // Front upper/lower wishbones
   strut(body, -0.38, 0.02,  1.10, fl.x * 0.92, fl.y + 0.02, fl.z - 0.05, 0.03, carbonMat);
   strut(body, -0.30, -0.08, 1.10, fl.x * 0.92, fl.y - 0.06, fl.z - 0.05, 0.03, carbonMat);
   strut(body,  0.38, 0.02,  1.10, fr.x * 0.92, fr.y + 0.02, fr.z - 0.05, 0.03, carbonMat);
   strut(body,  0.30, -0.08, 1.10, fr.x * 0.92, fr.y - 0.06, fr.z - 0.05, 0.03, carbonMat);
 
-  // Rear upper/lower wishbones
   strut(body, -0.40, 0.00, -1.05, bl.x * 0.92, bl.y + 0.02, bl.z + 0.05, 0.03, carbonMat);
   strut(body, -0.32, -0.10, -1.05, bl.x * 0.92, bl.y - 0.06, bl.z + 0.05, 0.03, carbonMat);
   strut(body,  0.40, 0.00, -1.05, br.x * 0.92, br.y + 0.02, br.z + 0.05, 0.03, carbonMat);
   strut(body,  0.32, -0.10, -1.05, br.x * 0.92, br.y - 0.06, br.z + 0.05, 0.03, carbonMat);
-
-  // ===== Small aero bits =====
-  box(body, 0.22, 0.03, 0.20, carbonMat, -0.52, 0.05, 1.40, 0, 0.25, 0);
-  box(body, 0.22, 0.03, 0.20, carbonMat,  0.52, 0.05, 1.40, 0, -0.25, 0);
-  box(body, 0.08, 0.08, 0.08, carbonMat, 0, 0.52, -1.50);
 
   return car;
 }
@@ -887,11 +850,10 @@ function computeSlipstreamForMe() {
     var dist = dVec.length();
     if (dist < 0.001 || dist > SLIP_DIST) continue;
 
-    var fwd = vec2(Math.sin(od), Math.cos(od)); // their forward in world
+    var fwd = vec2(Math.sin(od), Math.cos(od)); // their forward
     var along = dVec.dot(fwd);                  // + means I'm in front of them
     if (along > -0.25) continue;                // must be behind them
 
-    // lateral distance from their centerline
     var proj = fwd.clone().multiplyScalar(along);
     var lateral = dVec.clone().sub(proj).length();
     if (lateral > SLIP_WIDTH) continue;
@@ -899,7 +861,6 @@ function computeSlipstreamForMe() {
     var distFactor = clamp((SLIP_DIST - dist) / SLIP_DIST, 0, 1);
     var latFactor = clamp((SLIP_WIDTH - lateral) / SLIP_WIDTH, 0, 1);
 
-    // emphasize being centered
     var factor = distFactor * (latFactor * latFactor);
 
     if (factor > best) {
@@ -935,7 +896,7 @@ function setupInputOnce() {
     if (k === "ArrowDown" || k === "s" || k === "S") down = true;
 
     if (k === "Shift") {
-      // edge-trigger: only arm on fresh press
+      // edge-trigger arm on fresh press ONLY
       if (!nitro) {
         if (!nitroLock && nitroFuel > 0.5) nitroArmed = true;
       }
@@ -953,7 +914,7 @@ function setupInputOnce() {
     if (k === "Shift") {
       nitro = false;
       nitroArmed = false;
-      nitroLock = false; // unlock once released
+      nitroLock = false; // unlock on release (required by your spec)
       nitroActive = false;
     }
   });
@@ -1457,14 +1418,189 @@ function startCountdown(done) {
   }, 1000);
 }
 
-// ====== Player collisions (optional) ======
+// ====== RECTANGLE / OBB helpers ======
+function axesFromDir(dir) {
+  // forward = (sin, cos), right = (cos, -sin)
+  var fwd = vec2(Math.sin(dir), Math.cos(dir));
+  var right = vec2(Math.cos(dir), -Math.sin(dir));
+  return { fwd: fwd, right: right };
+}
+
+function worldToLocal(pWorld, centerWorld, axes) {
+  // return local coords (x=right, y=forward)
+  var v = pWorld.clone().sub(centerWorld);
+  return vec2(v.dot(axes.right), v.dot(axes.fwd));
+}
+
+function localToWorld(pLocal, axes) {
+  // pLocal is vec2 in (right, forward) components
+  return vec2(
+    axes.right.x * pLocal.x + axes.fwd.x * pLocal.y,
+    axes.right.y * pLocal.x + axes.fwd.y * pLocal.y
+  );
+}
+
+function pointSegDistSq(p, a, b) {
+  var ab = b.clone().sub(a);
+  var t = 0;
+  var len2 = ab.lengthSq();
+  if (len2 > 1e-9) t = clamp(p.clone().sub(a).dot(ab) / len2, 0, 1);
+  var q = a.clone().add(ab.multiplyScalar(t));
+  return { d2: p.distanceToSquared(q), q: q, t: t };
+}
+
+function pointRectClosest(p, hx, hy) {
+  // axis-aligned rect centered at origin
+  return vec2(clamp(p.x, -hx, hx), clamp(p.y, -hy, hy));
+}
+
+function segIntersectsAABB(a, b, hx, hy) {
+  // Liang–Barsky clip segment to rect
+  var t0 = 0, t1 = 1;
+  var dx = b.x - a.x;
+  var dy = b.y - a.y;
+
+  function clip(p, q) {
+    if (Math.abs(p) < 1e-9) return q >= 0;
+    var r = q / p;
+    if (p < 0) {
+      if (r > t1) return false;
+      if (r > t0) t0 = r;
+    } else {
+      if (r < t0) return false;
+      if (r < t1) t1 = r;
+    }
+    return true;
+  }
+
+  if (
+    clip(-dx, a.x + hx) &&
+    clip( dx, hx - a.x) &&
+    clip(-dy, a.y + hy) &&
+    clip( dy, hy - a.y)
+  ) {
+    return t0 <= t1;
+  }
+  return false;
+}
+
+function segRectDistanceLocal(a, b, hx, hy) {
+  // Returns minimum distance and approximate push normal in LOCAL space
+  // 1) If intersects rect => distance 0 (choose outward normal based on nearest side)
+  if (segIntersectsAABB(a, b, hx, hy)) {
+    // pick normal from segment midpoint clamped
+    var mid = a.clone().add(b).multiplyScalar(0.5);
+    var ax = hx - Math.abs(mid.x);
+    var ay = hy - Math.abs(mid.y);
+    if (ax < ay) return { dist: 0, n: vec2(mid.x >= 0 ? 1 : -1, 0) };
+    return { dist: 0, n: vec2(0, mid.y >= 0 ? 1 : -1) };
+  }
+
+  // 2) min of:
+  // - endpoint to rect
+  // - rect corners to segment
+  function pointRectDist(p) {
+    var dx = Math.max(Math.abs(p.x) - hx, 0);
+    var dy = Math.max(Math.abs(p.y) - hy, 0);
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  var bestDist = 1e9;
+  var bestN = vec2(0, 1);
+
+  // endpoint -> rect
+  var da = pointRectDist(a);
+  if (da < bestDist) {
+    var ca = pointRectClosest(a, hx, hy);
+    var n = ca.clone().sub(a);
+    if (n.lengthSq() > 1e-9) n.normalize();
+    bestDist = da;
+    bestN = n;
+  }
+  var db = pointRectDist(b);
+  if (db < bestDist) {
+    var cb = pointRectClosest(b, hx, hy);
+    var n2 = cb.clone().sub(b);
+    if (n2.lengthSq() > 1e-9) n2.normalize();
+    bestDist = db;
+    bestN = n2;
+  }
+
+  // corners -> segment
+  var corners = [
+    vec2(-hx, -hy),
+    vec2(-hx,  hy),
+    vec2( hx, -hy),
+    vec2( hx,  hy)
+  ];
+  for (var i = 0; i < corners.length; i++) {
+    var c = corners[i];
+    var r = pointSegDistSq(c, a, b);
+    var d = Math.sqrt(r.d2);
+    if (d < bestDist) {
+      var n3 = c.clone().sub(r.q);
+      if (n3.lengthSq() > 1e-9) n3.normalize();
+      bestDist = d;
+      bestN = n3;
+    }
+  }
+
+  return { dist: bestDist, n: bestN };
+}
+
+function obbOverlapMTV(aCenter, aDir, aHx, aHy, bCenter, bDir, bHx, bHy) {
+  // SAT on 4 axes: aRight, aFwd, bRight, bFwd.
+  // Returns {hit:false} or {hit:true, mtv:Vector2} (world)
+  var aAxes = axesFromDir(aDir);
+  var bAxes = axesFromDir(bDir);
+
+  var axes = [aAxes.right, aAxes.fwd, bAxes.right, bAxes.fwd];
+
+  var bestOverlap = 1e9;
+  var bestAxis = null;
+
+  var d = bCenter.clone().sub(aCenter);
+
+  for (var i = 0; i < axes.length; i++) {
+    var axis = axes[i].clone();
+    var len = axis.length();
+    if (len < 1e-9) continue;
+    axis.multiplyScalar(1 / len);
+
+    var dist = Math.abs(d.dot(axis));
+
+    var ra =
+      Math.abs(axis.dot(aAxes.right)) * aHx +
+      Math.abs(axis.dot(aAxes.fwd)) * aHy;
+
+    var rb =
+      Math.abs(axis.dot(bAxes.right)) * bHx +
+      Math.abs(axis.dot(bAxes.fwd)) * bHy;
+
+    var overlap = (ra + rb) - dist;
+    if (overlap <= 0) return { hit: false };
+
+    if (overlap < bestOverlap) {
+      bestOverlap = overlap;
+      bestAxis = axis;
+      // direction: from A to B projected on axis
+      if (d.dot(axis) < 0) bestAxis = axis.clone().multiplyScalar(-1);
+    }
+  }
+
+  return { hit: true, mtv: bestAxis.clone().multiplyScalar(bestOverlap) };
+}
+
+// ====== Player collisions (rectangle hitboxes) ======
 function collideWithPlayers() {
   if (!playerCollisionEnabled || !me) return;
 
-  var pPos = vec2(me.data.x, me.data.y);
-  var pVel = vec2(me.data.xv, me.data.yv);
+  var aCenter = vec2(me.data.x, me.data.y);
+  var aDir = me.data.dir;
+  var aHx = CAR_HALF_WIDTH;
+  var aHy = CAR_HALF_LENGTH;
 
-  var radius = 1.35;
+  var v = vec2(me.data.xv, me.data.yv);
 
   for (var k in players) {
     if (!players.hasOwnProperty(k)) continue;
@@ -1473,189 +1609,89 @@ function collideWithPlayers() {
     var p = players[k];
     if (!p || !p.data) continue;
 
-    var oPos = vec2(p.data.x, p.data.y);
-    var delta = pPos.clone().sub(oPos);
-    var dist = delta.length();
-    if (dist === 0) continue;
+    var bCenter = vec2(p.data.x || 0, p.data.y || 0);
+    var bDir = p.data.dir || 0;
+    var bHx = CAR_HALF_WIDTH;
+    var bHy = CAR_HALF_LENGTH;
 
-    if (dist < radius * 2) {
-      var n = delta.normalize();
-      var overlap = radius * 2 - dist;
-      pPos.add(n.clone().multiplyScalar(overlap));
+    var res = obbOverlapMTV(aCenter, aDir, aHx, aHy, bCenter, bDir, bHx, bHy);
+    if (!res.hit) continue;
 
-      if (pVel.dot(n) < 0) {
-        pVel = reflect2(pVel, n);
-        pVel.multiplyScalar(BOUNCE);
-      }
+    // Push me out by MTV
+    aCenter.sub(res.mtv);
 
-      p.data.x -= n.x * overlap * 0.5;
-      p.data.y -= n.y * overlap * 0.5;
-      p.data.xv -= n.x * 0.12;
-      p.data.yv -= n.y * 0.12;
+    // Reflect velocity if moving into collision normal
+    var n = res.mtv.clone();
+    if (n.lengthSq() > 1e-9) n.normalize();
+    if (v.dot(n) < 0) {
+      v = reflect2(v, n).multiplyScalar(BOUNCE);
     }
+
+    // Slightly nudge the other player (visual/feel)
+    p.data.x += n.x * 0.06;
+    p.data.y += n.y * 0.06;
+    p.data.xv = (p.data.xv || 0) + n.x * 0.05;
+    p.data.yv = (p.data.yv || 0) + n.y * 0.05;
   }
 
-  me.data.x = pPos.x;
-  me.data.y = pPos.y;
-  me.data.xv = pVel.x;
-  me.data.yv = pVel.y;
-}
-
-// ====== Physics + game loop ======
-function updateMePhysics(warp) {
-  if (!me || !me.data || !me.model) return;
-
-  // Slipstream (compute once per frame)
-  var slip = computeSlipstreamForMe();
-  slipTargetKey = slip.key;
-  slipFactor = slip.factor;
-
-  // Steering input
-  if (!mobile) {
-    if (left) me.data.steer = Math.PI / 6;
-    if (right) me.data.steer = -Math.PI / 6;
-    if (!(left ^ right)) me.data.steer = 0;
-  }
-  me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
-
-  var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-  me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
-
-  var brake = down ? 0.82 : 1.0;
-
-  // Nitro: only active if held AND armed on press AND has fuel AND not locked
-  var usingNitro = (nitro && nitroArmed && !nitroLock && nitroFuel > 0.01);
-  nitroActive = usingNitro;
-
-  // Drain/regenerate fuel
-  if (usingNitro) {
-    nitroFuel -= NITRO_DRAIN * warp * 0.016;
-    if (nitroFuel <= 0) {
-      nitroFuel = 0;
-      nitroArmed = false;
-      nitroLock = true;   // lock until Shift released
-      nitroActive = false;
-      usingNitro = false;
-    }
-  } else {
-    nitroFuel += NITRO_REGEN * warp * 0.016;
-  }
-  nitroFuel = clamp(nitroFuel, 0, NITRO_MAX);
-
-  // Base tuning
-  var ACCEL = SPEED * (usingNitro ? 5.0 : 2.0);
-  var FRICTION = 0.965;
-  var DRAG = 0.992;
-
-  // Slipstream bonuses
-  if (slipFactor > 0.001) {
-    ACCEL *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
-    DRAG = Math.min(0.999, DRAG + SLIP_DRAG_REDUCE * slipFactor);
-
-    // A small forward pull so you actually gain while drafting
-    if (!down) {
-      me.data.xv += Math.sin(me.data.dir) * (SPEED * SLIP_PUSH) * slipFactor * warp;
-      me.data.yv += Math.cos(me.data.dir) * (SPEED * SLIP_PUSH) * slipFactor * warp;
-    }
-  }
-
-  var REVERSE_ACCEL = ACCEL * 2.3;
-  var MAX_REVERSE = MAX_SPEED * 0.45;
-
-  if (up) {
-    me.data.xv += Math.sin(me.data.dir) * ACCEL * warp;
-    me.data.yv += Math.cos(me.data.dir) * ACCEL * warp;
-  }
-  if (down) {
-    me.data.xv -= Math.sin(me.data.dir) * REVERSE_ACCEL * warp;
-    me.data.yv -= Math.cos(me.data.dir) * REVERSE_ACCEL * warp;
-  }
-
-  me.data.xv *= Math.pow(FRICTION, warp);
-  me.data.yv *= Math.pow(FRICTION, warp);
-
-  me.data.xv *= DRAG * brake;
-  me.data.yv *= DRAG * brake;
-
-  var forwardSpeed =
-    me.data.xv * Math.sin(me.data.dir) +
-    me.data.yv * Math.cos(me.data.dir);
-
-  var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
-
-  // Slipstream increases top speed too
-  if (slipFactor > 0.001) {
-    topSpeed *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
-  }
-
-  if (forwardSpeed > topSpeed) {
-    var s1 = topSpeed / forwardSpeed;
-    me.data.xv *= s1;
-    me.data.yv *= s1;
-  }
-  if (forwardSpeed < -MAX_REVERSE) {
-    var s2 = MAX_REVERSE / Math.abs(forwardSpeed);
-    me.data.xv *= s2;
-    me.data.yv *= s2;
-  }
-
-  me.data.x += me.data.xv * warp;
-  me.data.y += me.data.yv * warp;
-
-  collideMeWithWalls();
-  collideWithPlayers();
-  handleCheckpoints();
-
-  if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
-    me.data.x = spawnX;
-    me.data.y = spawnY;
-    me.data.xv = 0;
-    me.data.yv = 0;
-    me.data.dir = spawnDir;
-
-    nitroArmed = false;
-    nitroLock = false;
-    nitroActive = false;
-  }
-
-  me.model.position.x = me.data.x;
-  me.model.position.z = me.data.y;
-  me.model.rotation.y = me.data.dir;
-
-  if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
-  if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
-}
-
-function collideMeWithWalls() {
-  var p = vec2(me.data.x, me.data.y);
-  var v = vec2(me.data.xv, me.data.yv);
-
-  for (var i = 0; i < wallSegs.length; i++) {
-    var w = wallSegs[i];
-    var c = segClosestPoint(p, w.a, w.b);
-    var delta = p.clone().sub(c);
-    var dist = delta.length();
-
-    if (dist < WALL_SIZE) {
-      var n = (dist > 1e-6) ? delta.multiplyScalar(1 / dist) : vec2(0, 1);
-
-      if (v.dot(n) < 0) {
-        var speed = v.length();
-        v = reflect2(v, n);
-        v.multiplyScalar(BOUNCE);
-        p.add(n.clone().multiplyScalar(0.08 + speed * 0.4));
-      }
-
-      p = c.add(n.multiplyScalar(WALL_SIZE + 0.001));
-    }
-  }
-
-  me.data.x = p.x;
-  me.data.y = p.y;
+  me.data.x = aCenter.x;
+  me.data.y = aCenter.y;
   me.data.xv = v.x;
   me.data.yv = v.y;
 }
 
+// ====== WALL collisions (rectangle hitbox vs wall segments) ======
+function collideMeWithWallsRect() {
+  if (!me) return;
+
+  var pWorld = vec2(me.data.x, me.data.y);
+  var vWorld = vec2(me.data.xv, me.data.yv);
+
+  var axes = axesFromDir(me.data.dir);
+
+  // Convert to local space around car center so car rect is axis-aligned
+  // We'll compute min push and apply it in world space.
+  for (var i = 0; i < wallSegs.length; i++) {
+    var w = wallSegs[i];
+
+    var aL = worldToLocal(w.a, pWorld, axes);
+    var bL = worldToLocal(w.b, pWorld, axes);
+
+    var hx = CAR_HALF_WIDTH;
+    var hy = CAR_HALF_LENGTH;
+
+    var res = segRectDistanceLocal(aL, bL, hx, hy);
+
+    if (res.dist < WALL_SIZE) {
+      // push amount in local space
+      var pushAmt = (WALL_SIZE - res.dist) + 0.001;
+      var nL = res.n.clone();
+      if (nL.lengthSq() < 1e-9) nL = vec2(0, 1);
+      nL.normalize();
+
+      var pushL = nL.multiplyScalar(pushAmt);
+      var pushW = localToWorld(pushL, axes);
+
+      pWorld.add(pushW);
+
+      // reflect velocity if moving into wall normal
+      var nW = pushW.clone();
+      if (nW.lengthSq() > 1e-9) nW.normalize();
+      if (vWorld.dot(nW) < 0) {
+        vWorld = reflect2(vWorld, nW).multiplyScalar(BOUNCE);
+        // small extra correction
+        pWorld.add(nW.clone().multiplyScalar(0.02));
+      }
+    }
+  }
+
+  me.data.x = pWorld.x;
+  me.data.y = pWorld.y;
+  me.data.xv = vWorld.x;
+  me.data.yv = vWorld.y;
+}
+
+// ====== Checkpoints ======
 function handleCheckpoints() {
   if (cpSegs.length < 2) return;
   var pos = vec2(me.data.x, me.data.y);
@@ -1695,8 +1731,138 @@ function handleCheckpoints() {
   }
 }
 
+// ====== Physics + game loop ======
+function updateMePhysics(warp, dtSec) {
+  if (!me || !me.data || !me.model) return;
+
+  // Slipstream
+  var slip = computeSlipstreamForMe();
+  slipTargetKey = slip.key;
+  slipFactor = slip.factor;
+
+  // Steering input
+  if (!mobile) {
+    if (left) me.data.steer = Math.PI / 6;
+    if (right) me.data.steer = -Math.PI / 6;
+    if (!(left ^ right)) me.data.steer = 0;
+  }
+  me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
+
+  var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+  me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
+
+  var brake = down ? 0.82 : 1.0;
+
+  // Nitro logic (your spec):
+  // - Only boost when fresh-pressed (armed), held, not locked, and has fuel
+  // - If fuel reaches 0 while still holding Shift -> lock boost, start recharging immediately
+  // - Must release Shift and press again to boost again
+  var usingNitro = (nitro && nitroArmed && !nitroLock && nitroFuel > 0.01);
+  nitroActive = usingNitro;
+
+  if (usingNitro) {
+    nitroFuel -= NITRO_DRAIN * dtSec;
+    if (nitroFuel <= 0) {
+      nitroFuel = 0;
+      nitroArmed = false;
+      nitroLock = true;      // lock until Shift released
+      nitroActive = false;
+      usingNitro = false;
+    }
+  } else {
+    // regen ALWAYS when not actively boosting (even if Shift is still held)
+    nitroFuel += NITRO_REGEN * dtSec;
+  }
+  nitroFuel = clamp(nitroFuel, 0, NITRO_MAX);
+
+  // Base tuning
+  var ACCEL = SPEED * (usingNitro ? 5.0 : 2.0);
+  var FRICTION = 0.965;
+  var DRAG = 0.992;
+
+  // Slipstream bonuses
+  if (slipFactor > 0.001) {
+    ACCEL *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
+    DRAG = Math.min(0.999, DRAG + SLIP_DRAG_REDUCE * slipFactor);
+
+    if (!down) {
+      me.data.xv += Math.sin(me.data.dir) * (SPEED * SLIP_PUSH) * slipFactor * warp;
+      me.data.yv += Math.cos(me.data.dir) * (SPEED * SLIP_PUSH) * slipFactor * warp;
+    }
+  }
+
+  var REVERSE_ACCEL = ACCEL * 2.3;
+  var MAX_REVERSE = MAX_SPEED * 0.45;
+
+  if (up) {
+    me.data.xv += Math.sin(me.data.dir) * ACCEL * warp;
+    me.data.yv += Math.cos(me.data.dir) * ACCEL * warp;
+  }
+  if (down) {
+    me.data.xv -= Math.sin(me.data.dir) * REVERSE_ACCEL * warp;
+    me.data.yv -= Math.cos(me.data.dir) * REVERSE_ACCEL * warp;
+  }
+
+  me.data.xv *= Math.pow(FRICTION, warp);
+  me.data.yv *= Math.pow(FRICTION, warp);
+
+  me.data.xv *= DRAG * brake;
+  me.data.yv *= DRAG * brake;
+
+  var forwardSpeed =
+    me.data.xv * Math.sin(me.data.dir) +
+    me.data.yv * Math.cos(me.data.dir);
+
+  var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
+  if (slipFactor > 0.001) topSpeed *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
+
+  if (forwardSpeed > topSpeed) {
+    var s1 = topSpeed / forwardSpeed;
+    me.data.xv *= s1;
+    me.data.yv *= s1;
+  }
+  if (forwardSpeed < -MAX_REVERSE) {
+    var s2 = MAX_REVERSE / Math.abs(forwardSpeed);
+    me.data.xv *= s2;
+    me.data.yv *= s2;
+  }
+
+  me.data.x += me.data.xv * warp;
+  me.data.y += me.data.yv * warp;
+
+  // Rectangle wall collision (replaces old circle hitbox)
+  collideMeWithWallsRect();
+  collideWithPlayers();
+
+  handleCheckpoints();
+
+  if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
+    me.data.x = spawnX;
+    me.data.y = spawnY;
+    me.data.xv = 0;
+    me.data.yv = 0;
+    me.data.dir = spawnDir;
+
+    nitroArmed = false;
+    nitroLock = false;
+    nitroActive = false;
+  }
+
+  me.model.position.x = me.data.x;
+  me.model.position.z = me.data.y;
+  me.model.rotation.y = me.data.dir;
+
+  if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
+  if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
+}
+
 function updateCamera(warp) {
   if (!me || !me.model) return;
+
+  // Nice boost feel: slightly widen FOV only when boost is actually active
+  var targetFov = nitroActive ? BOOST_FOV : BASE_FOV;
+  camera.fov = camera.fov * 0.88 + targetFov * 0.12;
+  camera.updateProjectionMatrix();
 
   var target = new THREE.Vector3(
     me.model.position.x + Math.sin(-me.model.rotation.y) * 5,
@@ -1774,6 +1940,7 @@ function updateNitroUI() {
   var fillEl = document.getElementById("nitrofill");
   if (!barEl || !fillEl) return;
 
+  // only visually "active" while boost is actually applying
   if (nitroActive) barEl.classList.add("active");
   else barEl.classList.remove("active");
 
@@ -1791,12 +1958,15 @@ function renderLoop(ts) {
 
   timepassed = Math.min(timepassed, 50);
   var warp = timepassed / 16;
+  var dtSec = timepassed / 1000;
 
   if (gameStarted && me) {
-    if (!gameSortaStarted) updateMePhysics(warp);
+    if (!gameSortaStarted) updateMePhysics(warp, dtSec);
     updateRemoteVisuals(warp);
+
     updateSlipstreamVisuals(ts);
     updateCamera(warp);
+
     updateHud();
     updateNitroUI();
     maybeSendToFirebase(ts);
@@ -1804,11 +1974,11 @@ function renderLoop(ts) {
     var a = ts * 0.0004;
     camera.position.set(50 * Math.sin(a), 20, 50 * Math.cos(a));
     camera.lookAt(new THREE.Vector3(0, 0, 0));
-    updateRemoteVisuals(warp);
-    // no drafting visuals pre-start
+
     slipTargetKey = null;
     slipFactor = 0;
     updateSlipstreamVisuals(ts);
+
     updateNitroUI();
   }
 
