@@ -1727,7 +1727,11 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
     me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
 
     var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-    me.data.dir += me.data.steer * (STEER_MIN + speedMag * STEER_SPEED) * warp;
+    var steerSign = forwardSpeed >= 0 ? 1 : -1;
+
+me.data.dir += steerSign * me.data.steer *
+  (STEER_MIN + speedMag * STEER_SPEED) * warp;
+
 
     var brake = down ? 0.82 : 1.0;
 
