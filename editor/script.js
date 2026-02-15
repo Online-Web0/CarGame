@@ -260,6 +260,21 @@ function imp(){
 	var startText = text[1].split(" ");
 	var treesText = text[2].split(" ");
 	var arrowsText = text[3].split(" ");
+// ---- spawn import (5th section) ----
+var spawnText = text[4];
+if (spawnText && spawnText.trim().length){
+	var sp = spawnText.split("/");
+	if (sp.length === 2){
+		var pos = sp[0].split(",");
+		if (pos.length >= 2){
+			spawn.x = parseInt(pos[0], 10) + Math.floor(width / scale / 2);
+			spawn.y = -parseInt(pos[1], 10) + Math.floor(height / scale / 2);
+
+			var dir = parseInt(sp[1], 10) * Math.PI / 180; // stored game heading
+			spawn.angle = (Math.PI / 2) - dir;             // convert back to editor angle
+		}
+	}
+}
 
 	walls = [];
 	for (var i = 0; i < wallsText.length; i++){
