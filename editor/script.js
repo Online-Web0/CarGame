@@ -352,50 +352,47 @@ for (var i = 0; i < arrowsText.length; i++) {
 
 function exp(){
 	var text = "";
-
 	for(var i = 0; i < walls.length; i++){
 		text += walls[i].start.x - Math.floor(width / scale / 2) + ",";
 		text += -1 * (walls[i].start.y - Math.floor(height / scale / 2)) + "/";
 		text += walls[i].end.x - Math.floor(width / scale / 2) + ",";
 		text += -1 * (walls[i].end.y - Math.floor(height / scale / 2)) + " ";
 	}
-
 	text += "|";
-
 	for(var i = 0; i < start.length; i++){
 		text += start[i].start.x - Math.floor(width / scale / 2) + ",";
 		text += -1 * (start[i].start.y - Math.floor(height / scale / 2)) + "/";
 		text += start[i].end.x - Math.floor(width / scale / 2) + ",";
 		text += -1 * (start[i].end.y - Math.floor(height / scale / 2)) + " ";
 	}
-
 	text += "|";
-
 	for(var i = 0; i < trees.length; i++){
 		text += trees[i].x - Math.floor(width / scale / 2) + ",";
 		text += -1 * (trees[i].y - Math.floor(height / scale / 2)) + " ";
 	}
-
 	text += "|";
-
 	for(var i = 0; i < arrows.length; i++){
 		text += arrows[i].x - Math.floor(width / scale / 2) + ",3,";
 		text += -1 * (arrows[i].y - Math.floor(height / scale / 2)) + "/";
 		text += Math.floor(90 - arrows[i].angle * 180 / Math.PI) + " ";
 	}
+text += "|";
+text += (spawn.x - Math.floor(width / scale / 2)) + ",";
+text += (-1 * (spawn.y - Math.floor(height / scale / 2))) + "/";
 
-	text += "|";
+var spawnDir = (Math.PI / 2) - spawn.angle;   // <-- key line
+text += Math.floor(spawnDir * 180 / Math.PI);
 
-	text += (spawn.x - Math.floor(width / scale / 2)) + ",";
-	text += (-1 * (spawn.y - Math.floor(height / scale / 2))) + "/";
-
-	var spawnDir = (Math.PI / 2) - spawn.angle;
-	text += Math.floor(spawnDir * 180 / Math.PI);
-
-	var win = window.open();
-	win.document.body.innerHTML = text;
+text += "|";
+text += "<br/>";
+function exportMap(){
+    return JSON.stringify({
+        walls,
+        trees,
+        arrows,
+        start
+    });
 }
-
 
 var walls = [];
 var start = [];
@@ -863,16 +860,7 @@ function dedupTrees(){
 				break;
 			}
 		}
-		function exportMap(){
-    return JSON.stringify({
-        walls,
-        start,
-        trees,
-        arrows,
-        spawn
-    });
-}
-
+		
 
 		poss.push(trees[i]);
 	}
