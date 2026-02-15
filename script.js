@@ -254,6 +254,18 @@ function hideAllMenusForGameplay() {
   // remove join / host UI
   safeRemove(document.getElementById("incode"));
   safeRemove(document.getElementById("startgame"));
+  if (typeof spawn !== "undefined") {
+  spawnX = spawn.x * 10;
+  spawnY = spawn.y * 10;
+  spawnDir = spawn.angle;
+
+  if (me && me.data) {
+    me.data.x = spawnX;
+    me.data.y = spawnY;
+    me.data.dir = spawnDir;
+  }
+}
+
   safeRemove(document.getElementById("code"));
   safeRemove(document.getElementById("modewrap"));
 
