@@ -199,10 +199,11 @@ ca.onmousemove = function(e){
 	mouse.cur.x = e.clientX;
 	mouse.cur.y = e.clientY;
 if (sel === 5 && mouse.down){
-    spawn.angle = Math.atan2(
-        mouse.start.y - mouse.cur.y,
-        mouse.start.x - mouse.cur.x
-    );
+   spawn.angle = Math.atan2(
+    mouse.cur.y - mouse.start.y,
+    mouse.cur.x - mouse.start.x
+);
+
 }
 
 	if (sel === 0 && mouse.down){
