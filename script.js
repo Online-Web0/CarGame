@@ -20,7 +20,7 @@
   var mapscale = 500;
   var VR = false;
   var BOUNCE_CORRECT = 0.01;
-  var WALL_SIZE = 0.6 / 2;       // used as wall "thickness" margin for collision
+  var WALL_SIZE = 0.35;       // used as wall "thickness" margin for collision
   var MOUNTAIN_DIST = 2500;
   var OOB_DIST = 2000;
   var LAPS = 3;
@@ -1624,44 +1624,50 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
   }
 
   // ====== WALL collisions (rectangle hitbox vs wall segments) ======
-  function collideMeWithWallsRect() {
-    if (!me) return;
+function collideMeWithWallsRect() {
+  if (!me) return;
 
-    var pWorld = vec2(me.data.x, me.data.y);
-    var vWorld = vec2(me.data.xv, me.data.yv);
+  var pWorld = vec2(me.data.x, me.data.y);
+  var vWorld = vec2(me.data.xv, me.data.yv);
 
-    var axes = axesFromDir(me.data.dir);
+  var axes = axesFromDir(me.data.dir);
 
-    for (var i = 0; i < wallSegs.length; i++) {
-      var w = wallSegs[i];
+  for (var i = 0; i < wallSegs.length; i++) {
+    var w = wallSegs[i];
 
-      var aL = worldToLocal(w.a, pWorld, axes);
-      var bL = worldToLocal(w.b, pWorld, axes);
+    var aL = worldToLocal(w.a, pWorld, axes);
+    var bL = worldToLocal(w.b, pWorld, axes);
 
-      var hx = CAR_HALF_WIDTH;
-      var hy = CAR_HALF_LENGTH;
+    var hx = CAR_HALF_WIDTH;
+    var hy = CAR_HALF_LENGTH;
 
-      var res = segRectDistanceLocal(aL, bL, hx, hy);
+    var res = segRectDistanceLocal(aL, bL, hx, hy);
 
-      if (res.dist < WALL_SIZE) {
-        var pushAmt = (WALL_SIZE - res.dist) + 0.001;
-        var nL = res.n.clone();
-        if (nL.lengthSq() < 1e-9) nL = vec2(0, 1);
-        nL.normalize();
+    if (res.dist < WALL_SIZE) {
+      var nL = res.n.clone();
+      if (nL.lengthSq() < 1e-9) continue;
+      nL.normalize();
 
-        var pushL = nL.multiplyScalar(pushAmt);
-        var pushW = localToWorld(pushL, axes);
+      // stronger push-out (prevents tunneling)
+      var push = (WALL_SIZE - res.dist) + 0.02;
 
-        pWorld.add(pushW);
+      var pushWorld = localToWorld(nL.multiplyScalar(push), axes);
+      pWorld.add(pushWorld);
 
-        var nW = pushW.clone();
-        if (nW.lengthSq() > 1e-9) nW.normalize();
-        if (vWorld.dot(nW) < 0) {
-          vWorld = reflect2(vWorld, nW).multiplyScalar(BOUNCE);
-          pWorld.add(nW.clone().multiplyScalar(0.02));
-        }
+      var nW = pushWorld.clone().normalize();
+
+      if (vWorld.dot(nW) < 0) {
+        vWorld = reflect2(vWorld, nW).multiplyScalar(0.25);
       }
     }
+  }
+
+  me.data.x = pWorld.x;
+  me.data.y = pWorld.y;
+  me.data.xv = vWorld.x;
+  me.data.yv = vWorld.y;
+}
+
 
     me.data.x = pWorld.x;
     me.data.y = pWorld.y;
