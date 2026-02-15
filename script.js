@@ -39,8 +39,8 @@
   var CAM_HEIGHT = 4;
 
   // ====== Car hitbox (rectangle) ======
- var CAR_HALF_WIDTH = 0.45;
-var CAR_HALF_LENGTH = 1.55;
+var CAR_HALF_WIDTH = 0.85;
+var CAR_HALF_LENGTH = 1.45;
 
   function MODS() {}
 
@@ -687,6 +687,7 @@ var CAR_HALF_LENGTH = 1.55;
 
     box(body, 0.10, 0.02, 2.40, whiteMat, 0, 0.16, 0.10);
     box(body, 0.55, 0.02, 0.50, whiteMat, 0, 0.16, -1.25);
+    box(body, 0.58, 0.22, 1.45, bodyMat, -0.82, -0.02, -0.15);
 
     // Slipstream FX (behind THIS car; used on the car you are drafting)
     (function addSlipFX() {
