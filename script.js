@@ -577,6 +577,8 @@ spawnY = start.mid.y + forward.y * 5;
 // ====== Cars + labels ======
 function makeCar(hexColor) {
   var car = new THREE.Object3D();
+car.position.set(spawn.x * 10, 0, spawn.y * 10);
+car.rotation.y = spawn.angle;
 
   var bodyGeo = new THREE.BoxGeometry(1.6, 0.6, 2.6);
   var bodyMat = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.7, metalness: 0.05 });
