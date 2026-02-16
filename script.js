@@ -1150,14 +1150,16 @@
     me = null;
   }
 
-  function connectToRoom(code, hostFlag) {
-    ensureEngine();
+function connectToRoom(code, hostFlag) {
+  if (meKey) return;
 
-    detachRoomListeners();
-    clearPlayers();
+  ensureEngine();
 
-    ROOM = (code || "").toUpperCase();
-    isHost = !!hostFlag;
+  detachRoomListeners();
+  clearPlayers();
+
+  ROOM = (code || "").toUpperCase();
+  isHost = !!hostFlag;
 
     if (!database) {
       showOverlayMsg("Firebase unavailable. Running SOLO.");
