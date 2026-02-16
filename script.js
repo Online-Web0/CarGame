@@ -1810,12 +1810,15 @@ if (USE_CLASSIC_PHYSICS) {
   // If you don't have "usingNitro" defined elsewhere, use nitroActive:
   var usingNitro = (typeof nitroActive !== "undefined") ? nitroActive : false;
 
-  // Understeer at speed
-  var sp0 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-  var TURN_SPEED_FALLOFF = 
+ // Understeer at speed
+var sp0 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
 
-  // Steering like original, but scaled by speed
-  me.data.dir += (me.data.steer / CLASSIC_TURN_DIV) * warp * steerScale;
+// Use your global TURN_SPEED_FALLOFF (already defined at top)
+var steerScale = 1 / (1 + sp0 * TURN_SPEED_FALLOFF);
+
+// Steering like original, but scaled by speed
+me.data.dir += (me.data.steer / CLASSIC_TURN_DIV) * warp * steerScale;
+
 
   // Throttle ONLY when pressing up (no auto-forward)
   var forwardOn = up;
