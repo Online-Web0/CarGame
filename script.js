@@ -47,7 +47,7 @@ var CLASSIC_DRAG = 0.99;
 var CLASSIC_TURN_DIV = 10;
 
 // Original basically always moved forward
-var CLASSIC_AUTO_FORWARD = true;
+var CLASSIC_AUTO_FORWARD = false;
 
 // Optional cap (original equilibrium speed was ~SPEED*(0.99/0.01) ≈ SPEED*99)
 // Example: SPEED=0.004 => ~0.396. Scale to taste in your new world.
@@ -1792,7 +1792,7 @@ if (USE_CLASSIC_PHYSICS) {
   me.data.dir += (me.data.steer / CLASSIC_TURN_DIV) * warp;
 
   // Throttle behavior
-  var forwardOn = up || (CLASSIC_AUTO_FORWARD && !down);
+  var forwardOn = up;
   var accel = SPEED; // use your new-script SPEED
 
   // Keep your nitro + slipstream multipliers if you want
