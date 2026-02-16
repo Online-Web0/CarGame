@@ -41,7 +41,7 @@ var SIDE_SCRUB_TURN_MULT = 0.85;     // while steering, scrub slightly less -> l
 var SIDE_SCRUB_NITRO_MULT = 0.75;    // nitro keeps sideways longer
 
 // Understeer at speed (higher = harder to turn when fast)
-var TURN_SPEED_FALLOFF = 3.0;        // 2–5 typical
+var TURN_SPEED_FALLOFF = 2.4; 
 
   // ====== Nitro tuning ======
   var NITRO_MAX = 100;
@@ -61,7 +61,7 @@ var USE_CLASSIC_PHYSICS = true;
 var CLASSIC_DRAG = 0.99;
 
 // Original had dir += steer/10 * warp
-var CLASSIC_TURN_DIV = 10;
+var CLASSIC_TURN_DIV = 9;  
 
 // Original basically always moved forward
 var CLASSIC_AUTO_FORWARD = false;
@@ -1812,7 +1812,7 @@ if (USE_CLASSIC_PHYSICS) {
 
   // Understeer at speed
   var sp0 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-  var steerScale = 1 / (1 + sp0 * TURN_SPEED_FALLOFF);
+  var TURN_SPEED_FALLOFF = 
 
   // Steering like original, but scaled by speed
   me.data.dir += (me.data.steer / CLASSIC_TURN_DIV) * warp * steerScale;
