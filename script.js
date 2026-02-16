@@ -398,35 +398,21 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
       spawnX = 0; spawnY = 0; spawnDir = 0;
       return;
     }
-spawnDir = deg * Math.PI / 180;
 
     var parts = track.split("|");
 
-  // ===== SPAWN (5th section: parts[4]) =====
-var hasSpawn = false;
-var spawnText = (parts[4] || "").trim();
-
-if (spawnText.length) {
-  var sp = spawnText.split("/");
-  var posTok = (sp[0] || "").trim();
-  var p = parseV2(posTok);
-
-  if (p) {
-    spawnX = p.x;
-    spawnY = p.y;
-    hasSpawn = true;
-  }
-
-  var deg = parseFloat(sp[1] || "0");
-  if (isFinite(deg)) {
-    // editor already stores correct rotation
-    hasSpawn = true;
-  }
-
-  spawnX -= Math.sin(spawnDir) * 0.8;
-  spawnY -= Math.cos(spawnDir) * 0.8;
-}
-
+    // ===== SPAWN (5th section: parts[4]) =====
+    var hasSpawn = false;
+    var spawnText = (parts[4] || "").trim();
+    if (spawnText.length) {
+      var sp = spawnText.split("/");
+      var posTok = (sp[0] || "").trim();
+      var p = parseV2(posTok);
+      if (p) {
+        spawnX = p.x;
+        spawnY = p.y;
+        hasSpawn = true;
+      }
 
       var deg = parseFloat(sp[1] || "0");
       if (isFinite(deg)) {
