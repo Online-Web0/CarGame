@@ -37,6 +37,10 @@
   var STEER_MIN = 0.05;
   var STEER_SPEED = 0.12;
   var CAM_HEIGHT = 4;
+// ===== Drift tuning =====
+var DRIFT_GRIP = 0.86;      // lower = more slide
+var NORMAL_GRIP = 0.96;
+var DRIFT_STEER_BOOST = 1.25;
 
   // ====== Car hitbox (rectangle) ======
 var CAR_HALF_WIDTH = 1.08;   // wheel-to-wheel
@@ -1786,32 +1790,70 @@ spawnDir = Math.atan2(forward.x, forward.y);
       me.data.yv -= Math.cos(me.data.dir) * REVERSE_ACCEL * warp;
     }
 
-    me.data.xv *= Math.pow(FRICTION, warp);
-    me.data.yv *= Math.pow(FRICTION, warp);
+ var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
+var rightVec = vec2(fwd.y, -fwd.x);
+
+var vel = vec2(me.data.xv, me.data.yv);
+
+var forwardVel = fwd.clone().multiplyScalar(vel.dot(fwd));
+var sideVel = rightVec.clone().multiplyScalar(vel.dot(rightVec));
+
+var grip = drifting ? DRIFT_GRIP : NORMAL_GRIP;
+
+sideVel.multiplyScalar(Math.pow(grip, warp));
+
+vel = forwardVel.add(sideVel);
+
+me.data.xv = vel.x;
+me.data.yv = vel.y;
+
 
     me.data.xv *= DRAG * brake;
     me.data.yv *= DRAG * brake;
 
-  var forwardSpeed =
+var forwardSpeed =
   me.data.xv * Math.sin(me.data.dir) +
   me.data.yv * Math.cos(me.data.dir);
 
-var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+var drifting =
+  (Math.abs(me.data.steer) > 0.2 &&
+   Math.abs(forwardSpeed) > 0.08);
 
+var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
+var rightVec = vec2(fwd.y, -fwd.x);
+
+var vel = vec2(me.data.xv, me.data.yv);
+
+var forwardVel = fwd.clone().multiplyScalar(vel.dot(fwd));
+var sideVel = rightVec.clone().multiplyScalar(vel.dot(rightVec));
+
+var grip = drifting ? DRIFT_GRIP : NORMAL_GRIP;
+sideVel.multiplyScalar(Math.pow(grip, warp));
+
+vel = forwardVel.add(sideVel);
+
+me.data.xv = vel.x;
+me.data.yv = vel.y;
+
+me.data.xv *= DRAG * brake;
+me.data.yv *= DRAG * brake;
+
+var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
 var steerSign = forwardSpeed >= 0 ? 1 : -1;
+var steerBoost = drifting ? DRIFT_STEER_BOOST : 1;
 
 me.data.dir += steerSign * me.data.steer *
-  (STEER_MIN + speedMag * STEER_SPEED) * warp;
+  (STEER_MIN + speedMag * STEER_SPEED) * warp * steerBoost;
 
-    
-    var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
-    if (slipFactor > 0.001) topSpeed *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
+var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
+if (slipFactor > 0.001) topSpeed *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
 
-    if (forwardSpeed > topSpeed) {
-      var s1 = topSpeed / forwardSpeed;
-      me.data.xv *= s1;
-      me.data.yv *= s1;
-    }
+if (forwardSpeed > topSpeed) {
+  var s1 = topSpeed / forwardSpeed;
+  me.data.xv *= s1;
+  me.data.yv *= s1;
+}
+
     if (forwardSpeed < -MAX_REVERSE) {
       var s2 = MAX_REVERSE / Math.abs(forwardSpeed);
       me.data.xv *= s2;
