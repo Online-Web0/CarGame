@@ -37,6 +37,21 @@
   var STEER_MIN = 0.05;
   var STEER_SPEED = 0.12;
   var CAM_HEIGHT = 4;
+// ===== Original-like physics (classic) =====
+var USE_CLASSIC_PHYSICS = true;
+
+// Original had xv *= 0.99^warp
+var CLASSIC_DRAG = 0.99;
+
+// Original had dir += steer/10 * warp
+var CLASSIC_TURN_DIV = 10;
+
+// Original basically always moved forward
+var CLASSIC_AUTO_FORWARD = true;
+
+// Optional cap (original equilibrium speed was ~SPEED*(0.99/0.01) ≈ SPEED*99)
+// Example: SPEED=0.004 => ~0.396. Scale to taste in your new world.
+var CLASSIC_MAX_SPEED = 0.40;
 
 
   // ====== Car hitbox (rectangle) ======
@@ -1683,7 +1698,7 @@ spawnDir = Math.atan2(forward.x, forward.y);
         var nW = pushWorld.clone().normalize();
 
         if (vWorld.dot(nW) < 0) {
-          vWorld = reflect2(vWorld, nW).multiplyScalar(0.6);
+vWorld = reflect2(vWorld, nW).multiplyScalar(BOUNCE);
         }
       }
     }
@@ -1753,146 +1768,76 @@ spawnDir = Math.atan2(forward.x, forward.y);
       if (!(left ^ right)) me.data.steer = 0;
     }
     me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
+// --- Nitro state update (per frame) ---
+nitroActive = false;
 
+if (nitro && nitroArmed && !nitroLock && nitroFuel > 0) {
+  nitroActive = true;
+  nitroFuel -= NITRO_DRAIN * dtSec;
 
+  if (nitroFuel <= 0) {
+    nitroFuel = 0;
+    nitroLock = true;     // locked until Shift released (your keyup clears it)
+    nitroArmed = false;
+    nitroActive = false;
+  }
+} else {
+  // regen only when not actively boosting
+  nitroFuel = Math.min(NITRO_MAX, nitroFuel + NITRO_REGEN * dtSec);
+}
 
+    // ===== Classic/original physics =====
+if (USE_CLASSIC_PHYSICS) {
+  // Steering exactly like original
+  me.data.dir += (me.data.steer / CLASSIC_TURN_DIV) * warp;
 
+  // Throttle behavior
+  var forwardOn = up || (CLASSIC_AUTO_FORWARD && !down);
+  var accel = SPEED; // use your new-script SPEED
 
-    var brake = down ? 0.82 : 1.0;
+  // Keep your nitro + slipstream multipliers if you want
+  if (nitroActive) accel *= 5.0;
+  if (slipFactor > 0.001) accel *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
 
-    // Nitro lockout spec
-    var usingNitro = (nitro && nitroArmed && !nitroLock && nitroFuel > 0.01);
-    nitroActive = usingNitro;
+  // Forward accel (original always accelerates forward)
+  if (forwardOn) {
+    me.data.xv += Math.sin(me.data.dir) * accel * warp;
+    me.data.yv += Math.cos(me.data.dir) * accel * warp;
+  }
 
-    if (usingNitro) {
-      nitroFuel -= NITRO_DRAIN * dtSec;
-      if (nitroFuel <= 0) {
-        nitroFuel = 0;
-        nitroArmed = false;
-        nitroLock = true;
-        nitroActive = false;
-        usingNitro = false;
-      }
-    } else {
-      // regen even if Shift held
-      nitroFuel += NITRO_REGEN * dtSec;
-    }
-    nitroFuel = clamp(nitroFuel, 0, NITRO_MAX);
+  // Optional reverse (your original didn’t really do this; keep if you want)
+  if (down) {
+    me.data.xv -= Math.sin(me.data.dir) * accel * 2.3 * warp;
+    me.data.yv -= Math.cos(me.data.dir) * accel * 2.3 * warp;
+  }
 
-    // Base tuning
-    var ACCEL = SPEED * (usingNitro ? 5.0 : 2.0);
-    var FRICTION = 0.965;
-    var DRAG = 0.992;
+  // Drag exactly like original
+  var dragPow = Math.pow(CLASSIC_DRAG, warp);
+  me.data.xv *= dragPow;
+  me.data.yv *= dragPow;
 
-    // Slipstream bonuses
-    if (slipFactor > 0.001) {
-      ACCEL *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
-      DRAG = Math.min(0.999, DRAG + SLIP_DRAG_REDUCE * slipFactor);
+  // Optional speed cap (helps match old “terminal velocity”)
+  var sp = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+  var cap = CLASSIC_MAX_SPEED;
+  if (nitroActive) cap *= 1.6;
+  if (slipFactor > 0.001) cap *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
 
-      if (!down) {
-        me.data.xv += Math.sin(me.data.dir) * (SPEED * SLIP_PUSH) * slipFactor * warp;
-        me.data.yv += Math.cos(me.data.dir) * (SPEED * SLIP_PUSH) * slipFactor * warp;
-      }
-    }
-
-    var REVERSE_ACCEL = ACCEL * 2.3;
-    var MAX_REVERSE = MAX_SPEED * 0.45;
-
-    if (up) {
-      me.data.xv += Math.sin(me.data.dir) * ACCEL * warp;
-      me.data.yv += Math.cos(me.data.dir) * ACCEL * warp;
-    }
-    if (down) {
-      me.data.xv -= Math.sin(me.data.dir) * REVERSE_ACCEL * warp;
-      me.data.yv -= Math.cos(me.data.dir) * REVERSE_ACCEL * warp;
-    }
-
-
-
-
-me.data.xv *= DRAG * brake;
-me.data.yv *= DRAG * brake;
-
-// ===== Smooth always-drift handling (REPLACE your current drift block with this) =====
-
-var ax0 = axesFromDir(me.data.dir);
-var forwardSpeed = me.data.xv * ax0.fwd.x + me.data.yv * ax0.fwd.y;
-
-
-// Basis vectors
-var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
-var rightVec = vec2(fwd.y, -fwd.x);
-
-// ===== Slip-angle drift model (REPLACE your posted block with this) =====
-var vel = vec2(me.data.xv, me.data.yv);
-var speed = vel.length();
-
-if (speed > 0.0001) {
-  var steer01 = clamp(Math.abs(me.data.steer) / (Math.PI / 6), 0, 1);
-
-  // velDir in your angle convention (atan2(x,y) because fwd=(sin,cos))
-  var velDir = Math.atan2(vel.x, vel.y);
-
-  // slip angle: difference between where car points and where it moves
-  var slipAng = wrapAngle(me.data.dir - velDir);
-
-  // slowly align velocity toward heading; align less while turning
-  var align = ALIGN_GRIP_BASE * (1 - ALIGN_GRIP_WHEN_TURNING * steer01);
-  align = clamp(align, 0.015, 0.16);
-
-  // rotate velocity a small amount toward car heading (don’t snap)
-  vel = rotateVecCW(vel, slipAng * align * warp);
-
-  // scrub sideways speed in car-local frame (controls how much rear “steps out”)
-  var ax = axesFromDir(me.data.dir);
-  var vLong = vel.dot(ax.fwd);
-  var vLat  = vel.dot(ax.right);
-
-  var scrub = SIDE_SCRUB_BASE + SIDE_SCRUB_TURN * steer01;
-  scrub = clamp(scrub, 0.02, 0.40);
-
-  vLat *= Math.pow(1 - scrub, warp);
-
-  // recombine
-  vel = ax.fwd.clone().multiplyScalar(vLong).add(ax.right.clone().multiplyScalar(vLat));
-  me.data.xv = vel.x;
-  me.data.yv = vel.y;
+  if (sp > cap && sp > 1e-9) {
+    var sc = cap / sp;
+    me.data.xv *= sc;
+    me.data.yv *= sc;
+  }
 }
 
 
-// --- Smoother steering response ---
-// Reduce how fast dir changes, especially at low speed (prevents twitch).
-// Also keep some speed scaling so it still feels responsive while moving.
-var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-var steerSign = (forwardSpeed >= 0 ? 1 : -1);
 
-// soft curve: at low speed -> small, at higher speed -> grows but not crazy
-var steerScale = (0.035 + 0.11 * speedMag);
 
-// optional extra softness if you want even less harsh:
-// steerScale *= 0.92;
+   
 
-me.data.dir += steerSign * me.data.steer * steerScale * warp;
 
-// --- Top speed limiting based on updated forward component ---
-var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
-if (slipFactor > 0.001) topSpeed *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
 
-var newForward =
-  me.data.xv * Math.sin(me.data.dir) +
-  me.data.yv * Math.cos(me.data.dir);
 
-if (newForward > topSpeed) {
-  var s1 = topSpeed / newForward;
-  me.data.xv *= s1;
-  me.data.yv *= s1;
-}
 
-if (newForward < -MAX_REVERSE) {
-  var s2 = MAX_REVERSE / Math.abs(newForward);
-  me.data.xv *= s2;
-  me.data.yv *= s2;
-}
 
 
  var steps = Math.ceil(Math.max(Math.abs(me.data.xv), Math.abs(me.data.yv)) * 4);
