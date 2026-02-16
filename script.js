@@ -1820,24 +1820,35 @@ var forwardSpeed =
   me.data.yv * Math.cos(me.data.dir);
 
 var drifting =
-  (Math.abs(me.data.steer) > 0.2 &&
-   Math.abs(forwardSpeed) > 0.08);
+  (Math.abs(me.data.steer) > 0.15 &&
+   Math.abs(forwardSpeed) > 0.05);
 
 var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
 var rightVec = vec2(fwd.y, -fwd.x);
 
 var vel = vec2(me.data.xv, me.data.yv);
 
+// split velocity
 var forwardVel = fwd.clone().multiplyScalar(vel.dot(fwd));
 var sideVel = rightVec.clone().multiplyScalar(vel.dot(rightVec));
 
-var grip = drifting ? DRIFT_GRIP : NORMAL_GRIP;
-sideVel.multiplyScalar(Math.pow(grip, warp));
+// friction model (THIS is the important part)
+var forwardFriction = drifting ? 0.995 : 0.98;
+var sideFriction    = drifting ? 0.82  : 0.55;
+
+forwardVel.multiplyScalar(Math.pow(forwardFriction, warp));
+sideVel.multiplyScalar(Math.pow(sideFriction, warp));
+
+// steering creates lateral slip
+if (drifting) {
+  sideVel.add(rightVec.clone().multiplyScalar(me.data.steer * Math.abs(forwardSpeed) * 0.35));
+}
 
 vel = forwardVel.add(sideVel);
 
 me.data.xv = vel.x;
 me.data.yv = vel.y;
+
 
 me.data.xv *= DRAG * brake;
 me.data.yv *= DRAG * brake;
