@@ -37,7 +37,7 @@ var DRIFT_ALIGN_SPEED_FALLOFF = 3.0; // higher = less grip at speed
 
 // Lateral scrub (how fast sideways motion dies)
 var SIDE_SCRUB = 0.035;              // 0.03–0.09
-var SIDE_SCRUB_TURN_MULT = 0.85;     // while steering, scrub slightly less -> longer drift
+var SIDE_SCRUB_TURN_MULT = 0.5;     // while steering, scrub slightly less -> longer drift
 var SIDE_SCRUB_NITRO_MULT = 0.75;    // nitro keeps sideways longer
 
 // Understeer at speed (higher = harder to turn when fast)
