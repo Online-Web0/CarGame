@@ -1780,8 +1780,8 @@ vWorld = reflect2(vWorld, nW).multiplyScalar(BOUNCE);
 
     // Steering (reverse behavior as requested)
     if (!mobile) {
-      if (left) me.data.steer = Math.PI / 6;
-      if (right) me.data.steer = -Math.PI / 6;
+      if (left) me.data.steer = Math.PI / 3.5;
+      if (right) me.data.steer = -Math.PI / 3.5;
       if (!(left ^ right)) me.data.steer = 0;
     }
     me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
