@@ -39,7 +39,7 @@
   var CAM_HEIGHT = 4;
 // ===== Drift tuning =====
 var DRIFT_GRIP = 0.59;      // lower = more slide
-var NORMAL_GRIP = 0.96;
+var NORMAL_GRIP = 0.80;
 var DRIFT_STEER_BOOST = 1.25;
 
   // ====== Car hitbox (rectangle) ======
