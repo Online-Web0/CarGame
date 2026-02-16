@@ -1638,32 +1638,33 @@ spawnDir = Math.atan2(forward.x, forward.y);
 
   var axes = axesFromDir(me.data.dir);
 
-  for (var i = 0; i < wallSegs.length; i++) {
-    var w = wallSegs[i];
+  // run collision resolution multiple passes
+  for (var pass = 0; pass < 2; pass++) {
 
-    var aL = worldToLocal(w.a, pWorld, axes);
-    var bL = worldToLocal(w.b, pWorld, axes);
+    for (var i = 0; i < wallSegs.length; i++) {
+      var w = wallSegs[i];
 
-    var hx = CAR_HALF_WIDTH;
-    var hy = CAR_HALF_LENGTH;
+      var aL = worldToLocal(w.a, pWorld, axes);
+      var bL = worldToLocal(w.b, pWorld, axes);
 
-    var res = segRectDistanceLocal(aL, bL, hx, hy);
+      var res = segRectDistanceLocal(aL, bL, CAR_HALF_WIDTH, CAR_HALF_LENGTH);
 
-    if (res.dist < WALL_SIZE) {
-      var nL = res.n.clone();
-      if (nL.lengthSq() < 1e-9) continue;
-      nL.normalize();
+      if (res.dist < WALL_SIZE) {
+        var nL = res.n.clone();
+        if (nL.lengthSq() < 1e-9) continue;
+        nL.normalize();
 
-      // stronger push-out (prevents tunneling)
-      var push = (WALL_SIZE - res.dist) + 0.02;
+        // stronger separation
+        var push = (WALL_SIZE - res.dist) + 0.05;
 
-      var pushWorld = localToWorld(nL.multiplyScalar(push), axes);
-      pWorld.add(pushWorld);
+        var pushWorld = localToWorld(nL.multiplyScalar(push), axes);
+        pWorld.add(pushWorld);
 
-      var nW = pushWorld.clone().normalize();
+        var nW = pushWorld.clone().normalize();
 
-      if (vWorld.dot(nW) < 0) {
-        vWorld = reflect2(vWorld, nW).multiplyScalar(0.25);
+        if (vWorld.dot(nW) < 0) {
+          vWorld = reflect2(vWorld, nW).multiplyScalar(0.15);
+        }
       }
     }
   }
@@ -1673,6 +1674,7 @@ spawnDir = Math.atan2(forward.x, forward.y);
   me.data.xv = vWorld.x;
   me.data.yv = vWorld.y;
 }
+
 
 
   // ====== Checkpoints ======
