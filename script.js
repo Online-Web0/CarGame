@@ -2,9 +2,9 @@
 // Features:
 // - F1 car model
 // - rectangular hitbox (car vs walls, car vs car)
-// - reverse steering behavior (left/right as you specified)
+// - reverse steering behavior (when reversing, steering flips)
 // - nitro lockout system (must release Shift to re-arm after empty)
-// - nitro bar always visible but only when in game
+// - nitro bar visible only when in game
 // - slipstream boost + visuals
 // - boost FOV camera effect
 // - multiplayer sync (Firebase RTDB; anonymous auth; solo fallback)
@@ -17,20 +17,20 @@
   var CAMERA_LAG = 0.82;
   var COLLISION = 1.1;
   var BOUNCE = 1.25;
-  var mapscale = 500;
-  var VR = false;
-  var BOUNCE_CORRECT = 0.01;
+  var mapscale = 500; // unused but kept
+  var VR = false;     // unused but kept
+  var BOUNCE_CORRECT = 0.01; // unused but kept
   var WALL_SIZE = 0.35;       // used as wall "thickness" margin for collision
-  var MOUNTAIN_DIST = 2500;
+  var MOUNTAIN_DIST = 2500;   // unused but kept
   var OOB_DIST = 2000;
   var LAPS = 3;
-  var NITRO_MULT = 2.0;
+  var NITRO_MULT = 2.0; // (used indirectly via accel multiplier)
 
   // ====== Nitro tuning ======
   var NITRO_MAX = 100;
   var nitroFuel = NITRO_MAX;
-  var NITRO_DRAIN = 45;   // per second
-  var NITRO_REGEN = 13;   // per second
+  var NITRO_DRAIN = 45; // per second
+  var NITRO_REGEN = 13; // per second
 
   // ====== Movement tuning ======
   var MAX_SPEED = 0.30;
@@ -39,9 +39,8 @@
   var CAM_HEIGHT = 4;
 
   // ====== Car hitbox (rectangle) ======
-var CAR_HALF_WIDTH = 1.08;   // wheel-to-wheel
-var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
-
+  var CAR_HALF_WIDTH = 1.08;   // wheel-to-wheel
+  var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
 
   function MODS() {}
 
@@ -92,9 +91,9 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
   }
 
   // ====== Three.js globals ======
-  var scene, renderer, camera;
-  var mapGroup, cpGroup, decoGroup;
-  var ground;
+  var scene = null, renderer = null, camera = null;
+  var mapGroup = null, cpGroup = null, decoGroup = null;
+  var ground = null;
 
   // ====== Map physics data ======
   var wallSegs = [];  // {a:V2,b:V2,dir:V2,len2:number,mesh:Mesh}
@@ -113,14 +112,11 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
   var me = null;
 
   var gameStarted = false;
-  var gameSortaStarted = false;
+  var gameSortaStarted = false; // during countdown
   var playerCollisionEnabled = false;
 
   // ====== Input state ======
-  var left = false;
-  var right = false;
-  var up = false;
-  var down = false;
+  var left = false, right = false, up = false, down = false;
   var mobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   // ====== UI elements ======
@@ -223,7 +219,7 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
 
     if (foreEl) {
       foreEl.style.pointerEvents = "none";
-      foreEl.style.display = "none"; // important: fully hide overlay container if present
+      foreEl.style.display = "none";
     }
     if (settingsEl) settingsEl.style.display = "none";
     if (toolbarEl) toolbarEl.classList.remove("sel");
@@ -284,7 +280,7 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
     ground.receiveShadow = true;
     scene.add(ground);
 
-    camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 1, 2000);
+    camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 4000);
     camera.position.set(0, CAM_HEIGHT, 10);
     scene.add(camera);
 
@@ -335,11 +331,12 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
       var st = document.createElement("style");
       st.id = "pLabelStyle";
       st.textContent =
-        ".pLabel{position:fixed;transform:translate(-50%,-100%);color:#fff;font-family:'Press Start 2P',monospace;font-size:12px;pointer-events:none;text-shadow:0 2px 0 rgba(0,0,0,.55);z-index:4;white-space:nowrap;}";
+        ".pLabel{position:fixed;transform:translate(-50%,-100%);color:#fff;font-family:'Press Start 2P',monospace;" +
+        "font-size:12px;pointer-events:none;text-shadow:0 2px 0 rgba(0,0,0,.55);z-index:4;white-space:nowrap;}";
       document.head.appendChild(st);
     }
 
-    // Nitro UI style (bar exists always, but we will hide/show via updateNitroUI)
+    // Nitro UI style
     if (!document.getElementById("nitroStyle")) {
       var ns = document.createElement("style");
       ns.id = "nitroStyle";
@@ -357,6 +354,7 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
       document.head.appendChild(ns);
     }
 
+    // Create nitro elements if missing
     if (!document.getElementById("nitrobar")) {
       var nb = makeDiv("nitrobar", "", "");
       var fill = makeDiv("nitrofill", "", "");
@@ -416,11 +414,9 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
 
       var deg = parseFloat(sp[1] || "0");
       if (isFinite(deg)) {
-// Editor deg assumed: 0° = +X (right), 90° = +Y (up)
-// Editor: 0°=+X, 90°=+Y (up). Game uses Y flipped via parseV2(x, -y).
-// Game forward is (sin(dir), cos(dir)), so dir must be θ + 90°.
-spawnDir = deg * Math.PI / 180;
-
+        // Keep it simple: store editor angle as radians.
+        // parseV2 flips Y already, so direction is consistent as long as editor exports same basis.
+        spawnDir = deg * Math.PI / 180;
         hasSpawn = true;
       }
 
@@ -576,8 +572,9 @@ spawnDir = deg * Math.PI / 180;
 
     spawnX = start.mid.x + forward.x * 5;
     spawnY = start.mid.y + forward.y * 5;
-// Inverse of fwd = (sin(dir), cos(dir))
-spawnDir = Math.atan2(forward.x, forward.y);
+
+    // Inverse of fwd = (sin(dir), cos(dir))
+    spawnDir = Math.atan2(forward.x, forward.y);
   }
 
   // ====== Cars + labels ======
@@ -693,7 +690,6 @@ spawnDir = Math.atan2(forward.x, forward.y);
 
     box(body, 0.10, 0.02, 2.40, whiteMat, 0, 0.16, 0.10);
     box(body, 0.55, 0.02, 0.50, whiteMat, 0, 0.16, -1.25);
-    box(body, 0.58, 0.22, 1.45, bodyMat, -0.82, -0.02, -0.15);
 
     // Slipstream FX (behind THIS car; used on the car you are drafting)
     (function addSlipFX() {
@@ -1146,7 +1142,7 @@ spawnDir = Math.atan2(forward.x, forward.y);
     for (var k in players) {
       if (!players.hasOwnProperty(k)) continue;
       var p = players[k];
-      if (p && p.model) scene.remove(p.model);
+      if (p && p.model && scene) scene.remove(p.model);
       if (p && p.label) safeRemove(p.label);
     }
     players = {};
@@ -1385,6 +1381,13 @@ spawnDir = Math.atan2(forward.x, forward.y);
 
     gameStarted = true;
     playerCollisionEnabled = false;
+
+    // Reset nitro state on start (prevents stuck lock from menu)
+    nitro = false;
+    nitroArmed = false;
+    nitroLock = false;
+    nitroActive = false;
+    nitroFuel = clamp(nitroFuel, 0, NITRO_MAX);
 
     hideAllMenusForGameplay();
 
@@ -1629,50 +1632,49 @@ spawnDir = Math.atan2(forward.x, forward.y);
   }
 
   // ====== WALL collisions (rectangle hitbox vs wall segments) ======
- function collideMeWithWallsRect() {
-  if (!me) return;
+  function collideMeWithWallsRect() {
+    if (!me) return;
 
-  var pWorld = vec2(me.data.x, me.data.y);
-  var vWorld = vec2(me.data.xv, me.data.yv);
+    var pWorld = vec2(me.data.x, me.data.y);
+    var vWorld = vec2(me.data.xv, me.data.yv);
 
-  var axes = axesFromDir(me.data.dir);
+    var axes = axesFromDir(me.data.dir);
 
-  for (var i = 0; i < wallSegs.length; i++) {
-    var w = wallSegs[i];
+    for (var i = 0; i < wallSegs.length; i++) {
+      var w = wallSegs[i];
 
-    var aL = worldToLocal(w.a, pWorld, axes);
-    var bL = worldToLocal(w.b, pWorld, axes);
+      var aL = worldToLocal(w.a, pWorld, axes);
+      var bL = worldToLocal(w.b, pWorld, axes);
 
-    var hx = CAR_HALF_WIDTH;
-    var hy = CAR_HALF_LENGTH;
+      var hx = CAR_HALF_WIDTH;
+      var hy = CAR_HALF_LENGTH;
 
-    var res = segRectDistanceLocal(aL, bL, hx, hy);
+      var res = segRectDistanceLocal(aL, bL, hx, hy);
 
-    if (res.dist < WALL_SIZE) {
-      var nL = res.n.clone();
-      if (nL.lengthSq() < 1e-9) continue;
-      nL.normalize();
+      if (res.dist < WALL_SIZE) {
+        var nL = res.n.clone();
+        if (nL.lengthSq() < 1e-9) continue;
+        nL.normalize();
 
-      // stronger push-out (prevents tunneling)
-      var push = (WALL_SIZE - res.dist) + 0.02;
+        var push = (WALL_SIZE - res.dist) + 0.02;
 
-      var pushWorld = localToWorld(nL.multiplyScalar(push), axes);
-      pWorld.add(pushWorld);
+        var pushWorld = localToWorld(nL.multiplyScalar(push), axes);
+        pWorld.add(pushWorld);
 
-      var nW = pushWorld.clone().normalize();
+        var nW = pushWorld.clone();
+        if (nW.lengthSq() > 1e-9) nW.normalize();
 
-      if (vWorld.dot(nW) < 0) {
-        vWorld = reflect2(vWorld, nW).multiplyScalar(0.25);
+        if (vWorld.dot(nW) < 0) {
+          vWorld = reflect2(vWorld, nW).multiplyScalar(0.25);
+        }
       }
     }
+
+    me.data.x = pWorld.x;
+    me.data.y = pWorld.y;
+    me.data.xv = vWorld.x;
+    me.data.yv = vWorld.y;
   }
-
-  me.data.x = pWorld.x;
-  me.data.y = pWorld.y;
-  me.data.xv = vWorld.x;
-  me.data.yv = vWorld.y;
-}
-
 
   // ====== Checkpoints ======
   function handleCheckpoints() {
@@ -1723,16 +1725,13 @@ spawnDir = Math.atan2(forward.x, forward.y);
     slipTargetKey = slip.key;
     slipFactor = slip.factor;
 
-    // Steering (reverse behavior as requested)
+    // Steering input (reverse behavior: the sign flip happens later)
     if (!mobile) {
       if (left) me.data.steer = Math.PI / 6;
       if (right) me.data.steer = -Math.PI / 6;
       if (!(left ^ right)) me.data.steer = 0;
     }
     me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
-
-  
-
 
     var brake = down ? 0.82 : 1.0;
 
@@ -1750,7 +1749,6 @@ spawnDir = Math.atan2(forward.x, forward.y);
         usingNitro = false;
       }
     } else {
-      // regen even if Shift held
       nitroFuel += NITRO_REGEN * dtSec;
     }
     nitroFuel = clamp(nitroFuel, 0, NITRO_MAX);
@@ -1793,12 +1791,14 @@ spawnDir = Math.atan2(forward.x, forward.y);
       me.data.xv * Math.sin(me.data.dir) +
       me.data.yv * Math.cos(me.data.dir);
 
-      var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-    var steerSign = forwardSpeed >= 0 ? 1 : -1;
+    var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
 
-me.data.dir += steerSign * me.data.steer *
-  (STEER_MIN + speedMag * STEER_SPEED) * warp;
-    
+    // IMPORTANT: reverse steering flip
+    var steerSign = forwardSpeed >= 0 ? -1 : 1;
+
+    me.data.dir += steerSign * me.data.steer *
+      (STEER_MIN + speedMag * STEER_SPEED) * warp;
+
     var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
     if (slipFactor > 0.001) topSpeed *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
 
@@ -1813,19 +1813,19 @@ me.data.dir += steerSign * me.data.steer *
       me.data.yv *= s2;
     }
 
- var steps = Math.ceil(Math.max(Math.abs(me.data.xv), Math.abs(me.data.yv)) * 4);
-steps = Math.max(1, steps);
+    // substeps to reduce tunneling
+    var steps = Math.ceil(Math.max(Math.abs(me.data.xv), Math.abs(me.data.yv)) * 4);
+    steps = Math.max(1, steps);
 
-for (var s = 0; s < steps; s++) {
-  me.data.x += (me.data.xv * warp) / steps;
-  me.data.y += (me.data.yv * warp) / steps;
+    for (var s = 0; s < steps; s++) {
+      me.data.x += (me.data.xv * warp) / steps;
+      me.data.y += (me.data.yv * warp) / steps;
 
-  collideMeWithWallsRect();
-  collideWithPlayers();
-}
+      collideMeWithWallsRect();
+      collideWithPlayers();
+    }
 
-handleCheckpoints();
-
+    handleCheckpoints();
 
     if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
       me.data.x = spawnX;
@@ -1849,7 +1849,7 @@ handleCheckpoints();
   }
 
   function updateCamera(warp) {
-    if (!me || !me.model) return;
+    if (!me || !me.model || !camera) return;
 
     var targetFov = nitroActive ? BOOST_FOV : BASE_FOV;
     camera.fov = camera.fov * 0.88 + targetFov * 0.12;
@@ -1933,14 +1933,14 @@ handleCheckpoints();
     var lblEl = document.getElementById("nitrolabel");
     if (!barEl || !fillEl || !lblEl) return;
 
-    // Only visible while in game
-    if (gameStarted) {
-      barEl.style.display = "block";
-      lblEl.style.display = "block";
-    } else {
+    if (!gameStarted || !me) {
       barEl.style.display = "none";
       lblEl.style.display = "none";
+      return;
     }
+
+    barEl.style.display = "block";
+    lblEl.style.display = "block";
 
     if (nitroActive) barEl.classList.add("active");
     else barEl.classList.remove("active");
@@ -1953,6 +1953,8 @@ handleCheckpoints();
 
   function renderLoop(ts) {
     requestAnimationFrame(renderLoop);
+    ensureEngine();
+
     if (!lastTime) lastTime = ts;
 
     var timepassed = ts - lastTime;
@@ -1973,10 +1975,12 @@ handleCheckpoints();
       updateNitroUI();
       maybeSendToFirebase(ts);
     } else {
-      // menu idle camera
-      var a = ts * 0.0004;
-      camera.position.set(50 * Math.sin(a), 20, 50 * Math.cos(a));
-      camera.lookAt(new THREE.Vector3(0, 0, 0));
+      // menu idle camera (guard camera exists)
+      if (camera) {
+        var a = ts * 0.0004;
+        camera.position.set(50 * Math.sin(a), 20, 50 * Math.cos(a));
+        camera.lookAt(new THREE.Vector3(0, 0, 0));
+      }
 
       slipTargetKey = null;
       slipFactor = 0;
@@ -1985,7 +1989,7 @@ handleCheckpoints();
     }
 
     updateLabels();
-    renderer.render(scene, camera);
+    if (renderer && scene && camera) renderer.render(scene, camera);
     MODS();
   }
 
