@@ -37,10 +37,7 @@
   var STEER_MIN = 0.05;
   var STEER_SPEED = 0.12;
   var CAM_HEIGHT = 4;
-// ===== Drift tuning =====
-var DRIFT_GRIP = 0.59;      // lower = more slide
-var NORMAL_GRIP = 0.80;
-var DRIFT_STEER_BOOST = 1.25;
+
 
   // ====== Car hitbox (rectangle) ======
 var CAR_HALF_WIDTH = 1.08;   // wheel-to-wheel
@@ -146,6 +143,25 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
     if (typeof text === "string") d.innerHTML = text;
     return d;
   }
+function wrapAngle(a) {
+  a = (a + Math.PI) % (2 * Math.PI);
+  if (a < 0) a += 2 * Math.PI;
+  return a - Math.PI;
+}
+
+// Your angle system is 0=+Y and uses (sin,cos), so +angle is "clockwise".
+// This rotates a vector by a clockwise-positive angle.
+function rotateVecCW(v, ang) {
+  var c = Math.cos(ang), s = Math.sin(ang);
+  return vec2(v.x * c + v.y * s, -v.x * s + v.y * c);
+}
+
+// ===== Drift behavior tuning =====
+// Lower ALIGN = more drift (velocity stays independent longer)
+var ALIGN_GRIP_BASE = 0.08;      // 0.05–0.12
+var ALIGN_GRIP_WHEN_TURNING = 0.55; // how much alignment drops while steering (0–0.8)
+var SIDE_SCRUB_BASE = 0.06;      // lateral damping (0.03–0.12)
+var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10–0.30)
 
   function vec2(x, y) { return new THREE.Vector2(x, y); }
 
@@ -1667,7 +1683,7 @@ spawnDir = Math.atan2(forward.x, forward.y);
         var nW = pushWorld.clone().normalize();
 
         if (vWorld.dot(nW) < 0) {
-          vWorld = reflect2(vWorld, nW).multiplyScalar(0.15);
+          vWorld = reflect2(vWorld, nW).multiplyScalar(0.6);
         }
       }
     }
@@ -1738,7 +1754,8 @@ spawnDir = Math.atan2(forward.x, forward.y);
     }
     me.data.steer = clamp(me.data.steer, -Math.PI / 6, Math.PI / 6);
 
-  
+
+
 
 
     var brake = down ? 0.82 : 1.0;
@@ -1793,59 +1810,55 @@ spawnDir = Math.atan2(forward.x, forward.y);
 
 
 
-    me.data.xv *= DRAG * brake;
-    me.data.yv *= DRAG * brake;
+me.data.xv *= DRAG * brake;
+me.data.yv *= DRAG * brake;
 
 // ===== Smooth always-drift handling (REPLACE your current drift block with this) =====
 
-// Compute forward speed along car's facing
-var forwardSpeed =
-  me.data.xv * Math.sin(me.data.dir) +
-  me.data.yv * Math.cos(me.data.dir);
+var ax0 = axesFromDir(me.data.dir);
+var forwardSpeed = me.data.xv * ax0.fwd.x + me.data.yv * ax0.fwd.y;
+
 
 // Basis vectors
 var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
 var rightVec = vec2(fwd.y, -fwd.x);
 
-// Current velocity as vector2
+// ===== Slip-angle drift model (REPLACE your posted block with this) =====
 var vel = vec2(me.data.xv, me.data.yv);
+var speed = vel.length();
 
-// Split velocity into forward + sideways components
-var fComp = vel.dot(fwd);
-var sComp = vel.dot(rightVec);
+if (speed > 0.0001) {
+  var steer01 = clamp(Math.abs(me.data.steer) / (Math.PI / 6), 0, 1);
 
-// --- Always-drift grip model ---
-// targetSide is what sideways speed "should" be after grip (lower grip => more drift)
-// sideKeep: 0 = kill sideways instantly, 1 = keep sideways fully
-// We keep a lot of sideways all the time so every turn drifts.
-var speedAbs = Math.abs(fComp);
+  // velDir in your angle convention (atan2(x,y) because fwd=(sin,cos))
+  var velDir = Math.atan2(vel.x, vel.y);
 
-// More drift at higher speed, but still drifting at low speed
-var sideKeep = clamp(0.72 + (speedAbs * 0.55), 0.72, 0.95);
+  // slip angle: difference between where car points and where it moves
+  var slipAng = wrapAngle(me.data.dir - velDir);
 
-// Smoothly reduce sideways component toward kept amount
-sComp *= Math.pow(sideKeep, warp);
+  // slowly align velocity toward heading; align less while turning
+  var align = ALIGN_GRIP_BASE * (1 - ALIGN_GRIP_WHEN_TURNING * steer01);
+  align = clamp(align, 0.015, 0.16);
 
-// --- Steering-induced slip (what makes the car rotate + slide) ---
-// Add a sideways push proportional to steering + speed.
-// This creates drift even on small turns.
-var steer01 = clamp(Math.abs(me.data.steer) / (Math.PI / 6), 0, 1);
+  // rotate velocity a small amount toward car heading (don’t snap)
+  vel = rotateVecCW(vel, slipAng * align * warp);
 
-// stronger at speed, mild at low speed
-var slipPush = (0.10 + 0.45 * speedAbs) * steer01;
+  // scrub sideways speed in car-local frame (controls how much rear “steps out”)
+  var ax = axesFromDir(me.data.dir);
+  var vLong = vel.dot(ax.fwd);
+  var vLat  = vel.dot(ax.right);
 
-// direction of slip depends on steer sign
-sComp += (me.data.steer >= 0 ? 1 : -1) * slipPush * warp;
+  var scrub = SIDE_SCRUB_BASE + SIDE_SCRUB_TURN * steer01;
+  scrub = clamp(scrub, 0.02, 0.40);
 
-// --- Forward damping (controls "harsh grip") ---
-// Keep forward fairly stable (don’t over-damp)
-var forwardKeep = 0.985;
-fComp *= Math.pow(forwardKeep, warp);
+  vLat *= Math.pow(1 - scrub, warp);
 
-// Recompose velocity
-vel = fwd.clone().multiplyScalar(fComp).add(rightVec.clone().multiplyScalar(sComp));
-me.data.xv = vel.x;
-me.data.yv = vel.y;
+  // recombine
+  vel = ax.fwd.clone().multiplyScalar(vLong).add(ax.right.clone().multiplyScalar(vLat));
+  me.data.xv = vel.x;
+  me.data.yv = vel.y;
+}
+
 
 // --- Smoother steering response ---
 // Reduce how fast dir changes, especially at low speed (prevents twitch).
