@@ -1155,6 +1155,7 @@ spawnDir = Math.atan2(forward.x, forward.y);
   }
 
   function connectToRoom(code, hostFlag) {
+   if (meKey) return;
     ensureEngine();
 
     detachRoomListeners();
@@ -1340,7 +1341,11 @@ spawnDir = Math.atan2(forward.x, forward.y);
 
     inEl.addEventListener("input", function () { inEl.value = inEl.value.toUpperCase(); });
     inEl.addEventListener("keydown", function (e) { if (e.key === "Enter") doJoin(); });
-    joinBtn.onclick = doJoin;
+joinBtn.onclick = function () {
+  joinBtn.onclick = null;      // prevents re-joining
+  joinBtn.style.opacity = "0.5";
+  doJoin();
+};
   }
 
   function soloFlow() {
