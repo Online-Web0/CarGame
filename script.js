@@ -1834,7 +1834,7 @@ var sideVel = rightVec.clone().multiplyScalar(vel.dot(rightVec));
 
 // friction model (THIS is the important part)
 var forwardFriction = drifting ? 0.995 : 0.98;
-var sideFriction    = drifting ? 0.82  : 0.55;
+var sideFriction = drifting ? 0.95 : 0.25;
 
 forwardVel.multiplyScalar(Math.pow(forwardFriction, warp));
 sideVel.multiplyScalar(Math.pow(sideFriction, warp));
