@@ -1335,22 +1335,8 @@ spawnDir = Math.atan2(forward.x, forward.y);
     function doJoin() {
       var code = (inEl.value || "").trim().toUpperCase();
       if (!code) return;
-
-      inEl.disabled = true;
-      joinBtn.style.opacity = "0.6";
-      joinBtn.textContent = "JOINING...";
-
       connectToRoom(code, false);
     }
-
-    inEl.addEventListener("input", function () { inEl.value = inEl.value.toUpperCase(); });
-    inEl.addEventListener("keydown", function (e) { if (e.key === "Enter") doJoin(); });
-
-    joinBtn.onclick = function () {
-      joinBtn.onclick = null; // prevent double-join
-      doJoin();
-    };
-  }
 
     inEl.addEventListener("input", function () { inEl.value = inEl.value.toUpperCase(); });
     inEl.addEventListener("keydown", function (e) { if (e.key === "Enter") doJoin(); });
