@@ -1682,7 +1682,7 @@ spawnDir = Math.atan2(forward.x, forward.y);
   }
 
   // ====== WALL collisions (rectangle hitbox vs wall segments) ======
- function collideMeWithWallsRect() {
+function collideMeWithWallsRect() {
   if (!me) return;
 
   var pWorld = vec2(me.data.x, me.data.y);
@@ -1690,8 +1690,8 @@ spawnDir = Math.atan2(forward.x, forward.y);
 
   var axes = axesFromDir(me.data.dir);
 
-  // run collision resolution multiple passes
-  for (var pass = 0; pass < 2; pass++) {
+  // Multiple passes = prevents tunneling
+  for (var pass = 0; pass < 4; pass++) {
 
     for (var i = 0; i < wallSegs.length; i++) {
       var w = wallSegs[i];
@@ -1702,20 +1702,23 @@ spawnDir = Math.atan2(forward.x, forward.y);
       var res = segRectDistanceLocal(aL, bL, CAR_HALF_WIDTH, CAR_HALF_LENGTH);
 
       if (res.dist < WALL_SIZE) {
+
         var nL = res.n.clone();
         if (nL.lengthSq() < 1e-9) continue;
         nL.normalize();
 
-        // stronger separation
-        var push = (WALL_SIZE - res.dist) + 0.05;
+        // Strong push-out
+        var push = (WALL_SIZE - res.dist) + 0.15;
 
         var pushWorld = localToWorld(nL.multiplyScalar(push), axes);
         pWorld.add(pushWorld);
 
         var nW = pushWorld.clone().normalize();
 
-        if (vWorld.dot(nW) < 0) {
-vWorld = reflect2(vWorld, nW).multiplyScalar(BOUNCE);
+        // Remove velocity INTO wall (not bounce)
+        var vn = vWorld.dot(nW);
+        if (vn < 0) {
+          vWorld.sub(nW.multiplyScalar(vn));
         }
       }
     }
@@ -1726,6 +1729,7 @@ vWorld = reflect2(vWorld, nW).multiplyScalar(BOUNCE);
   me.data.xv = vWorld.x;
   me.data.yv = vWorld.y;
 }
+
 
 
 
@@ -1915,7 +1919,7 @@ vy = fwd.y * vf + side.y * vl;
 
 
 
- var steps = Math.ceil(Math.max(Math.abs(me.data.xv), Math.abs(me.data.yv)) * 4);
+ var steps = Math.ceil(Math.max(Math.abs(me.data.xv), Math.abs(me.data.yv)) * 6);
 steps = Math.max(1, steps);
 
 for (var s = 0; s < steps; s++) {
