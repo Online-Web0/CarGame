@@ -1869,20 +1869,20 @@ if (USE_CLASSIC_PHYSICS) {
     vy = Math.cos(velAng) * sp;
 
     // small sideways scrub (keeps it from drifting forever)
-    var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
-    var right = vec2(fwd.y, -fwd.x);
-
-    var vf = vx * fwd.x + vy * fwd.y;
-    var vl = vx * right.x + vy * right.y;
+   var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
+var side = vec2(fwd.y, -fwd.x);
+   
+   var vf = vx * fwd.x + vy * fwd.y;
+var vl = vx * side.x + vy * side.y;
 
     var scrub = SIDE_SCRUB;
     if (Math.abs(me.data.steer) > 0.001) scrub *= SIDE_SCRUB_TURN_MULT;
     if (usingNitro) scrub *= SIDE_SCRUB_NITRO_MULT;
 
-    vl *= Math.pow(1 - scrub, warp);
-
-    vx = fwd.x * vf + right.x * vl;
-    vy = fwd.y * vf + right.y * vl;
+vl *= Math.pow(1 - scrub, warp);
+    
+   vx = fwd.x * vf + side.x * vl;
+vy = fwd.y * vf + side.y * vl;
 
     me.data.xv = vx;
     me.data.yv = vy;
