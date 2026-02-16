@@ -16,7 +16,7 @@
   var SPEED = 0.016;
   var CAMERA_LAG = 0.82;
   var COLLISION = 1.1;
-  var BOUNCE = 1.25;
+  var BOUNCE = 1.45;
   var mapscale = 500;
   var VR = false;
   var BOUNCE_CORRECT = 0.01;
@@ -30,13 +30,13 @@ var THROTTLE_RAMP_UP_SEC = 1.0;    // ~1 second to reach full accel
 var THROTTLE_RAMP_DOWN_SEC = 0.25; // how fast it drops when you release
 // ===== Drift / grip =====
 // Lower = more sliding / more pre-turn required
-var DRIFT_ALIGN_BASE = 0.030;        // how fast velocity aligns to heading (0.015–0.06)
-var DRIFT_ALIGN_TURN_MULT = 0.55;    // while steering, alignment gets WORSE (<1 = more drift)
+var DRIFT_ALIGN_BASE = 0.020;        // how fast velocity aligns to heading (0.015–0.06)
+var DRIFT_ALIGN_TURN_MULT = 0.40;    // while steering, alignment gets WORSE (<1 = more drift)
 var DRIFT_ALIGN_NITRO_MULT = 0.40;   // nitro reduces grip (<1 = more drift)
-var DRIFT_ALIGN_SPEED_FALLOFF = 2.2; // higher = less grip at speed
+var DRIFT_ALIGN_SPEED_FALLOFF = 3.0; // higher = less grip at speed
 
 // Lateral scrub (how fast sideways motion dies)
-var SIDE_SCRUB = 0.055;              // 0.03–0.09
+var SIDE_SCRUB = 0.035;              // 0.03–0.09
 var SIDE_SCRUB_TURN_MULT = 0.85;     // while steering, scrub slightly less -> longer drift
 var SIDE_SCRUB_NITRO_MULT = 0.75;    // nitro keeps sideways longer
 
