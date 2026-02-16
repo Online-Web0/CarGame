@@ -1790,26 +1790,7 @@ spawnDir = Math.atan2(forward.x, forward.y);
       me.data.yv -= Math.cos(me.data.dir) * REVERSE_ACCEL * warp;
     }
 
- var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
-var rightVec = vec2(fwd.y, -fwd.x);
 
-var vel = vec2(me.data.xv, me.data.yv);
-
-var forwardVel = fwd.clone().multiplyScalar(vel.dot(fwd));
-var sideVel = rightVec.clone().multiplyScalar(vel.dot(rightVec));
-
-  if (drifting) {
-  var slip = me.data.steer * Math.abs(forwardSpeed) * 0.45;
-  sideVel.add(rightVec.clone().multiplyScalar(slip));
-}
-
-var grip = drifting ? DRIFT_GRIP : NORMAL_GRIP;
-
-sideVel.multiplyScalar(Math.pow(grip, warp));
-vel = forwardVel.add(sideVel);
-
-me.data.xv = vel.x;
-me.data.yv = vel.y;
 
 
     me.data.xv *= DRAG * brake;
