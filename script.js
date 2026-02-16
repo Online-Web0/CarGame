@@ -1155,6 +1155,7 @@ spawnDir = Math.atan2(forward.x, forward.y);
   }
 
   function connectToRoom(code, hostFlag) {
+      if (meKey) return;   // prevents multiple cars spawning
     ensureEngine();
 
     detachRoomListeners();
@@ -1794,7 +1795,7 @@ spawnDir = Math.atan2(forward.x, forward.y);
       me.data.yv * Math.cos(me.data.dir);
 
       var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-    var steerSign = forwardSpeed >= 0 ? 1 : -1;
+var steerSign = forwardSpeed >= 0 ? -1 : 1;
 
 me.data.dir += steerSign * me.data.steer *
   (STEER_MIN + speedMag * STEER_SPEED) * warp;
