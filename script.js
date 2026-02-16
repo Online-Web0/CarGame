@@ -1796,65 +1796,91 @@ spawnDir = Math.atan2(forward.x, forward.y);
     me.data.xv *= DRAG * brake;
     me.data.yv *= DRAG * brake;
 
+// ===== Smooth always-drift handling (REPLACE your current drift block with this) =====
+
+// Compute forward speed along car's facing
 var forwardSpeed =
   me.data.xv * Math.sin(me.data.dir) +
   me.data.yv * Math.cos(me.data.dir);
 
-var drifting =
-  (Math.abs(me.data.steer) > 0.15 &&
-   Math.abs(forwardSpeed) > 0.05);
-
+// Basis vectors
 var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
 var rightVec = vec2(fwd.y, -fwd.x);
 
+// Current velocity as vector2
 var vel = vec2(me.data.xv, me.data.yv);
 
-// split velocity
-var forwardVel = fwd.clone().multiplyScalar(vel.dot(fwd));
-var sideVel = rightVec.clone().multiplyScalar(vel.dot(rightVec));
+// Split velocity into forward + sideways components
+var fComp = vel.dot(fwd);
+var sComp = vel.dot(rightVec);
 
-// friction model (THIS is the important part)
-var forwardFriction = drifting ? 0.995 : 0.98;
-var sideFriction = drifting ? 0.95 : 0.25;
+// --- Always-drift grip model ---
+// targetSide is what sideways speed "should" be after grip (lower grip => more drift)
+// sideKeep: 0 = kill sideways instantly, 1 = keep sideways fully
+// We keep a lot of sideways all the time so every turn drifts.
+var speedAbs = Math.abs(fComp);
 
-forwardVel.multiplyScalar(Math.pow(forwardFriction, warp));
-sideVel.multiplyScalar(Math.pow(sideFriction, warp));
+// More drift at higher speed, but still drifting at low speed
+var sideKeep = clamp(0.72 + (speedAbs * 0.55), 0.72, 0.95);
 
-// steering creates lateral slip
-if (drifting) {
-  sideVel.add(rightVec.clone().multiplyScalar(me.data.steer * Math.abs(forwardSpeed) * 0.35));
-}
+// Smoothly reduce sideways component toward kept amount
+sComp *= Math.pow(sideKeep, warp);
 
-vel = forwardVel.add(sideVel);
+// --- Steering-induced slip (what makes the car rotate + slide) ---
+// Add a sideways push proportional to steering + speed.
+// This creates drift even on small turns.
+var steer01 = clamp(Math.abs(me.data.steer) / (Math.PI / 6), 0, 1);
 
+// stronger at speed, mild at low speed
+var slipPush = (0.10 + 0.45 * speedAbs) * steer01;
+
+// direction of slip depends on steer sign
+sComp += (me.data.steer >= 0 ? 1 : -1) * slipPush * warp;
+
+// --- Forward damping (controls "harsh grip") ---
+// Keep forward fairly stable (don’t over-damp)
+var forwardKeep = 0.985;
+fComp *= Math.pow(forwardKeep, warp);
+
+// Recompose velocity
+vel = fwd.clone().multiplyScalar(fComp).add(rightVec.clone().multiplyScalar(sComp));
 me.data.xv = vel.x;
 me.data.yv = vel.y;
 
-
-me.data.xv *= DRAG * brake;
-me.data.yv *= DRAG * brake;
-
+// --- Smoother steering response ---
+// Reduce how fast dir changes, especially at low speed (prevents twitch).
+// Also keep some speed scaling so it still feels responsive while moving.
 var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-var steerSign = forwardSpeed >= 0 ? 1 : -1;
-var steerBoost = drifting ? DRIFT_STEER_BOOST : 1;
+var steerSign = (forwardSpeed >= 0 ? 1 : -1);
 
-me.data.dir += steerSign * me.data.steer *
-  (STEER_MIN + speedMag * STEER_SPEED) * warp * steerBoost;
+// soft curve: at low speed -> small, at higher speed -> grows but not crazy
+var steerScale = (0.035 + 0.11 * speedMag);
 
+// optional extra softness if you want even less harsh:
+// steerScale *= 0.92;
+
+me.data.dir += steerSign * me.data.steer * steerScale * warp;
+
+// --- Top speed limiting based on updated forward component ---
 var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
 if (slipFactor > 0.001) topSpeed *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
 
-if (forwardSpeed > topSpeed) {
-  var s1 = topSpeed / forwardSpeed;
+var newForward =
+  me.data.xv * Math.sin(me.data.dir) +
+  me.data.yv * Math.cos(me.data.dir);
+
+if (newForward > topSpeed) {
+  var s1 = topSpeed / newForward;
   me.data.xv *= s1;
   me.data.yv *= s1;
 }
 
-    if (forwardSpeed < -MAX_REVERSE) {
-      var s2 = MAX_REVERSE / Math.abs(forwardSpeed);
-      me.data.xv *= s2;
-      me.data.yv *= s2;
-    }
+if (newForward < -MAX_REVERSE) {
+  var s2 = MAX_REVERSE / Math.abs(newForward);
+  me.data.xv *= s2;
+  me.data.yv *= s2;
+}
+
 
  var steps = Math.ceil(Math.max(Math.abs(me.data.xv), Math.abs(me.data.yv)) * 4);
 steps = Math.max(1, steps);
