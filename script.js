@@ -124,6 +124,7 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
     console.warn("Firebase init failed (solo still works):", e);
   }
 
+
   // ====== Three.js globals ======
   var scene, renderer, camera;
   var mapGroup, cpGroup, decoGroup;
@@ -160,6 +161,15 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
   var foreEl, titleEl, startEl, nameEl, pickerEl, sliderEl, countdownEl, lapEl, settingsEl, toolbarEl;
   var modeWrapEl = null;
   var overlayMsgEl = null;
+// ===== GLTF car model =====
+var gltfLoader = null;
+var CAR_TEMPLATE = null;       // loaded gltf scene (template)
+var CAR_LOAD_QUEUE = [];       // callbacks waiting for load
+
+// tweak these once you see it in-game
+var CAR_SCALE = 1.0;           // set to 0.4, 0.2, etc if it's huge
+var CAR_YAW_OFFSET = 0;        // set to Math.PI/2 or Math.PI if facing wrong way
+var CAR_Y_OFFSET = 0.0;        // raise/lower on ground (ex: 0.1)
 
   // Global color
   var color = "#ff3030";
@@ -390,6 +400,19 @@ var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€
         ".pLabel{position:fixed;transform:translate(-50%,-100%);color:#fff;font-family:'Press Start 2P',monospace;font-size:12px;pointer-events:none;text-shadow:0 2px 0 rgba(0,0,0,.55);z-index:4;white-space:nowrap;}";
       document.head.appendChild(st);
     }
+
+      });
+
+      // run queued spawns
+      for (var i = 0; i < CAR_LOAD_QUEUE.length; i++) CAR_LOAD_QUEUE[i]();
+      CAR_LOAD_QUEUE.length = 0;
+    },
+    undefined,
+    function (err) {
+      console.error("Failed to load car GLTF:", err);
+    }
+  );
+}
 
     // Nitro UI style (bar exists always, but we will hide/show via updateNitroUI)
     if (!document.getElementById("nitroStyle")) {
@@ -633,230 +656,71 @@ spawnDir = Math.atan2(forward.x, forward.y);
   }
 
   // ====== Cars + labels ======
-  function makeCar(hexColor) {
-    var car = new THREE.Object3D();
+function makeCar(hexColor) {
+  var car = new THREE.Group();
 
-    var bodyMat = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.5, metalness: 0.12 });
-    var carbonMat = new THREE.MeshStandardMaterial({ color: 0x0f0f10, roughness: 0.9, metalness: 0.05 });
-    var darkMat = new THREE.MeshStandardMaterial({ color: 0x171717, roughness: 0.85, metalness: 0.05 });
-    var metalMat = new THREE.MeshStandardMaterial({ color: 0x6b6b6b, roughness: 0.45, metalness: 0.5 });
-    var glassMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.25, metalness: 0.05, transparent: true, opacity: 0.9 });
-    var whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.02 });
+  // placeholder so game never crashes while GLTF loads
+  var ph = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, 0.4, 2.6),
+    new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.7, metalness: 0.1 })
+  );
+  ph.position.y = 0.4;
+  ph.castShadow = true;
+  ph.receiveShadow = true;
+  car.add(ph);
 
-    function addMesh(parent, mesh, x, y, z, rx, ry, rz) {
-      if (x != null) mesh.position.x = x;
-      if (y != null) mesh.position.y = y;
-      if (z != null) mesh.position.z = z;
-      if (rx != null) mesh.rotation.x = rx;
-      if (ry != null) mesh.rotation.y = ry;
-      if (rz != null) mesh.rotation.z = rz;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      parent.add(mesh);
-      return mesh;
-    }
+  function attachGLTF() {
+    if (!CAR_TEMPLATE) return;
 
-    function box(parent, w, h, l, mat, x, y, z, rx, ry, rz) {
-      return addMesh(parent, new THREE.Mesh(new THREE.BoxGeometry(w, h, l), mat), x, y, z, rx, ry, rz);
-    }
+    if (ph && ph.parent) ph.parent.remove(ph);
 
-    function cyl(parent, rTop, rBot, h, seg, mat, x, y, z, rx, ry, rz) {
-      return addMesh(parent, new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, seg), mat), x, y, z, rx, ry, rz);
-    }
+    var model = CAR_TEMPLATE.clone(true);
 
-    function sphere(parent, r, seg, mat, x, y, z) {
-      return addMesh(parent, new THREE.Mesh(new THREE.SphereGeometry(r, seg, seg), mat), x, y, z);
-    }
-
-    function torus(parent, r, tube, segR, segT, mat, x, y, z, rx, ry, rz) {
-      return addMesh(parent, new THREE.Mesh(new THREE.TorusGeometry(r, tube, segR, segT), mat), x, y, z, rx, ry, rz);
-    }
-
-    function strut(parent, ax, ay, az, bx, by, bz, radius, mat) {
-      var a = new THREE.Vector3(ax, ay, az);
-      var b = new THREE.Vector3(bx, by, bz);
-      var dir = b.clone().sub(a);
-      var len = dir.length();
-      if (len < 1e-6) return null;
-
-      var m = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, len, 10), mat);
-      m.castShadow = true;
-      m.receiveShadow = true;
-
-      var mid = a.clone().add(b).multiplyScalar(0.5);
-      m.position.copy(mid);
-
-      dir.normalize();
-      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-
-      parent.add(m);
-      return m;
-    }
-
-    // (CHILD 0) Body
-    var body = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.30, 2.85), bodyMat);
-    body.castShadow = true;
-    body.receiveShadow = true;
-    body.position.y = 0.55;
-    car.add(body);
-
-    box(body, 1.28, 0.06, 3.55, carbonMat, 0, -0.19, 0);
-    box(body, 0.22, 0.10, 0.95, carbonMat, 0, -0.11, 1.55);
-
-    cyl(body, 0.12, 0.22, 1.25, 12, bodyMat, 0, -0.02, 1.65, Math.PI / 2, 0, 0);
-    cyl(body, 0.06, 0.12, 0.30, 10, darkMat, 0, -0.03, 2.25, Math.PI / 2, 0, 0);
-
-    box(body, 2.35, 0.06, 0.42, carbonMat, 0, -0.16, 2.18);
-    box(body, 2.10, 0.05, 0.26, darkMat, 0, -0.08, 2.30);
-
-    box(body, 0.08, 0.26, 0.46, carbonMat, -1.14, -0.03, 2.18);
-    box(body, 0.08, 0.26, 0.46, carbonMat,  1.14, -0.03, 2.18);
-
-    box(body, 0.10, 0.18, 0.10, carbonMat, -0.24, -0.05, 2.05);
-    box(body, 0.10, 0.18, 0.10, carbonMat,  0.24, -0.05, 2.05);
-
-    box(body, 0.58, 0.22, 1.45, bodyMat, -0.82, -0.02, -0.15);
-    box(body, 0.58, 0.22, 1.45, bodyMat,  0.82, -0.02, -0.15);
-
-    box(body, 0.35, 0.12, 0.35, darkMat, -0.90, 0.04, 0.45);
-    box(body, 0.35, 0.12, 0.35, darkMat,  0.90, 0.04, 0.45);
-
-    box(body, 0.10, 0.14, 0.55, carbonMat, -0.65, -0.07, 0.55);
-    box(body, 0.10, 0.14, 0.55, carbonMat,  0.65, -0.07, 0.55);
-
-    box(body, 0.55, 0.22, 1.25, bodyMat, 0, 0.12, -1.05);
-    box(body, 0.06, 0.40, 0.95, carbonMat, 0, 0.30, -1.20);
-
-    cyl(body, 0.16, 0.16, 0.20, 12, carbonMat, 0, 0.34, -0.35, 0, 0, 0);
-    box(body, 0.28, 0.14, 0.22, darkMat, 0, 0.33, -0.35);
-
-    box(body, 1.55, 0.09, 0.42, carbonMat, 0, 0.22, -1.92);
-    box(body, 1.35, 0.06, 0.28, darkMat, 0, 0.30, -1.98);
-
-    box(body, 0.08, 0.48, 0.44, carbonMat, -0.74, 0.04, -1.92);
-    box(body, 0.08, 0.48, 0.44, carbonMat,  0.74, 0.04, -1.92);
-
-    box(body, 0.08, 0.30, 0.08, carbonMat, -0.20, 0.05, -1.72);
-    box(body, 0.08, 0.30, 0.08, carbonMat,  0.20, 0.05, -1.72);
-
-    box(body, 0.92, 0.12, 0.55, darkMat, 0, -0.12, -1.82);
-
-    cyl(body, 0.06, 0.06, 0.25, 10, metalMat, 0, 0.15, -1.70, Math.PI / 2, 0, 0);
-
-    box(body, 0.10, 0.02, 2.40, whiteMat, 0, 0.16, 0.10);
-    box(body, 0.55, 0.02, 0.50, whiteMat, 0, 0.16, -1.25);
-    box(body, 0.58, 0.22, 1.45, bodyMat, -0.82, -0.02, -0.15);
-
-    // Slipstream FX (behind THIS car; used on the car you are drafting)
-    (function addSlipFX() {
-      var slip = new THREE.Group();
-      slip.name = "slipfx";
-      slip.visible = false;
-
-      var geo = new THREE.PlaneGeometry(0.10, 6.0);
-      geo.rotateX(-Math.PI / 2);
-
-      function lineMesh(x) {
-        var mat = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
-          transparent: true,
-          opacity: 0,
-          depthWrite: false
-        });
-        mat.blending = THREE.AdditiveBlending;
-
-        var mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(x, -0.52, -3.8);
-        mesh.renderOrder = 9999;
-        return mesh;
+    model.traverse(function (o) {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
       }
+    });
 
-      slip.add(lineMesh(-0.35));
-      slip.add(lineMesh(0.35));
-      body.add(slip);
-    })();
+    model.scale.setScalar(CAR_SCALE);
+    model.rotation.y += CAR_YAW_OFFSET;
+    model.position.y += CAR_Y_OFFSET;
 
-    // (CHILD 1) Cabin
-    var cabin = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.20, 0.90), glassMat);
-    cabin.castShadow = true;
-    cabin.receiveShadow = true;
-    cabin.position.set(0, 0.78, 0.25);
-    car.add(cabin);
+    // wheel refs for steering
+    car.userData.wFL = null;
+    car.userData.wFR = null;
 
-    torus(cabin, 0.28, 0.04, 10, 18, carbonMat, 0, 0.10, -0.06, Math.PI / 2, 0, 0);
-    box(cabin, 0.06, 0.16, 0.06, carbonMat, 0, 0.06, 0.18);
-    torus(cabin, 0.12, 0.03, 8, 14, darkMat, 0, -0.02, 0.22, 0.2, 0, 0);
-    sphere(cabin, 0.13, 12, whiteMat, 0, 0.08, 0.10);
-    box(cabin, 0.14, 0.05, 0.10, carbonMat, -0.45, 0.03, 0.45);
-    box(cabin, 0.14, 0.05, 0.10, carbonMat,  0.45, 0.03, 0.45);
+    var wheelCandidates = [];
+    model.traverse(function (o) {
+      var n = (o.name || "").toLowerCase();
+      if (n.includes("wheel") || n.includes("tyre") || n.includes("tire")) wheelCandidates.push(o);
+    });
 
-    // Wheels (top-level; indices matter)
-    function wheelMesh(radius, thickness) {
-      var g = new THREE.CylinderGeometry(radius, radius, thickness, 18);
-      var m = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 1, metalness: 0.02 });
-      var w = new THREE.Mesh(g, m);
-      w.rotation.z = Math.PI / 2;
-      w.castShadow = true;
-      w.receiveShadow = true;
-
-      var rim = new THREE.Mesh(
-        new THREE.CylinderGeometry(radius * 0.62, radius * 0.62, thickness + 0.02, 14),
-        new THREE.MeshStandardMaterial({ color: 0x303030, roughness: 0.55, metalness: 0.25 })
-      );
-      rim.rotation.z = Math.PI / 2;
-      w.add(rim);
-
-      var disc = new THREE.Mesh(
-        new THREE.CylinderGeometry(radius * 0.35, radius * 0.35, thickness + 0.03, 12),
-        metalMat
-      );
-      disc.rotation.z = Math.PI / 2;
-      w.add(disc);
-
-      var cal = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.18), darkMat);
-      cal.position.set(0, radius * 0.45, 0);
-      w.add(cal);
-
-      return w;
+    // Prefer named FL/FR if present
+    for (var i = 0; i < wheelCandidates.length; i++) {
+      var nm = (wheelCandidates[i].name || "").toLowerCase();
+      if (!car.userData.wFL && (nm.includes("fl") || nm.includes("front_left"))) car.userData.wFL = wheelCandidates[i];
+      if (!car.userData.wFR && (nm.includes("fr") || nm.includes("front_right"))) car.userData.wFR = wheelCandidates[i];
     }
 
-    var FL = { x: -1.08, y: 0.36, z: 1.52 };
-    var FR = { x:  1.08, y: 0.36, z: 1.52 };
-    var BL = { x: -1.08, y: 0.40, z: -1.32 };
-    var BR = { x:  1.08, y: 0.40, z: -1.32 };
+    // fallback: first two wheels found
+    if (!car.userData.wFL && wheelCandidates[0]) car.userData.wFL = wheelCandidates[0];
+    if (!car.userData.wFR && wheelCandidates[1]) car.userData.wFR = wheelCandidates[1];
 
-    // (CHILD 2..5)
-    var frontLeft = wheelMesh(0.36, 0.30);
-    frontLeft.position.set(FL.x, FL.y, FL.z);
-    car.add(frontLeft);
-
-    var frontRight = wheelMesh(0.36, 0.30);
-    frontRight.position.set(FR.x, FR.y, FR.z);
-    car.add(frontRight);
-
-    var backLeft = wheelMesh(0.42, 0.34);
-    backLeft.position.set(BL.x, BL.y, BL.z);
-    car.add(backLeft);
-
-    var backRight = wheelMesh(0.42, 0.34);
-    backRight.position.set(BR.x, BR.y, BR.z);
-    car.add(backRight);
-
-    function toBodyLocal(p) { return { x: p.x, y: p.y - 0.55, z: p.z }; }
-    var fl = toBodyLocal(FL), fr = toBodyLocal(FR), bl = toBodyLocal(BL), br = toBodyLocal(BR);
-
-    strut(body, -0.38, 0.02,  1.10, fl.x * 0.92, fl.y + 0.02, fl.z - 0.05, 0.03, carbonMat);
-    strut(body, -0.30, -0.08, 1.10, fl.x * 0.92, fl.y - 0.06, fl.z - 0.05, 0.03, carbonMat);
-    strut(body,  0.38, 0.02,  1.10, fr.x * 0.92, fr.y + 0.02, fr.z - 0.05, 0.03, carbonMat);
-    strut(body,  0.30, -0.08, 1.10, fr.x * 0.92, fr.y - 0.06, fr.z - 0.05, 0.03, carbonMat);
-
-    strut(body, -0.40, 0.00, -1.05, bl.x * 0.92, bl.y + 0.02, bl.z + 0.05, 0.03, carbonMat);
-    strut(body, -0.32, -0.10, -1.05, bl.x * 0.92, bl.y - 0.06, bl.z + 0.05, 0.03, carbonMat);
-    strut(body,  0.40, 0.00, -1.05, br.x * 0.92, br.y + 0.02, br.z + 0.05, 0.03, carbonMat);
-    strut(body,  0.32, -0.10, -1.05, br.x * 0.92, br.y - 0.06, br.z + 0.05, 0.03, carbonMat);
-
-    return car;
+    car.add(model);
   }
+
+  if (CAR_TEMPLATE) {
+    attachGLTF();
+  } else {
+    preloadCarGLTF();
+    CAR_LOAD_QUEUE.push(attachGLTF);
+  }
+
+  return car;
+}
+
 
   function makeLabel(name) {
     var el = document.createElement("div");
@@ -1947,8 +1811,9 @@ handleCheckpoints();
     me.model.rotation.y = me.data.dir;
 
     // Front wheel steer
-    if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
-    if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
+   if (me.model.userData && me.model.userData.wFL) me.model.userData.wFL.rotation.y = -me.data.steer;
+if (me.model.userData && me.model.userData.wFR) me.model.userData.wFR.rotation.y = -me.data.steer;
+
   }
 
   function updateCamera(warp) {
@@ -2095,6 +1960,7 @@ handleCheckpoints();
   // ====== Init ======
   function init() {
     ensureEngine();
+preloadCarGLTF();
 
     if (foreEl) foreEl.style.pointerEvents = "auto";
     if (foreEl && foreEl.style.display === "none") foreEl.style.display = "";
@@ -2116,6 +1982,33 @@ handleCheckpoints();
   } else {
     init();
   }
+function preloadCarGLTF() {
+  ensureEngine();
+  if (CAR_TEMPLATE) return;
+
+  if (!gltfLoader) gltfLoader = new THREE.GLTFLoader();
+
+  gltfLoader.load(
+    "models/Online-Web0/scene.gltf",
+    function (gltf) {
+      CAR_TEMPLATE = gltf.scene;
+
+      CAR_TEMPLATE.traverse(function (o) {
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.receiveShadow = true;
+        }
+      });
+
+      for (var i = 0; i < CAR_LOAD_QUEUE.length; i++) CAR_LOAD_QUEUE[i]();
+      CAR_LOAD_QUEUE.length = 0;
+    },
+    undefined,
+    function (err) {
+      console.error("Failed to load car GLTF:", err);
+    }
+  );
+}
 
   // ====== Compatibility with your existing HTML inline onclick handlers ======
   window.menu2 = showModeMenu;
