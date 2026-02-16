@@ -25,6 +25,9 @@
   var OOB_DIST = 2000;
   var LAPS = 3;
   var NITRO_MULT = 2.0;
+// ===== Launch grip / throttle ramp =====
+var THROTTLE_RAMP_UP_SEC = 1.0;    // ~1 second to reach full accel
+var THROTTLE_RAMP_DOWN_SEC = 0.25; // how fast it drops when you release
 
   // ====== Nitro tuning ======
   var NITRO_MAX = 100;
@@ -1794,16 +1797,27 @@ if (USE_CLASSIC_PHYSICS) {
   // Throttle behavior
   var forwardOn = up;
   var accel = SPEED; // use your new-script SPEED
+// Only accelerate when Up/W (since you removed auto-forward)
+var forwardOn = up;
+
+// Smooth throttle: ramps up over ~1s to simulate "getting grip"
+if (me.data.throttle === undefined) me.data.throttle = 0;
+
+var target = forwardOn ? 1 : 0;
+var ramp = (target > me.data.throttle) ? THROTTLE_RAMP_UP_SEC : THROTTLE_RAMP_DOWN_SEC;
+var k = clamp(dtSec / Math.max(ramp, 0.0001), 0, 1);
+me.data.throttle = me.data.throttle + (target - me.data.throttle) * k;
 
   // Keep your nitro + slipstream multipliers if you want
   if (nitroActive) accel *= 5.0;
   if (slipFactor > 0.001) accel *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
 
   // Forward accel (original always accelerates forward)
-  if (forwardOn) {
-    me.data.xv += Math.sin(me.data.dir) * accel * warp;
-    me.data.yv += Math.cos(me.data.dir) * accel * warp;
-  }
+if (forwardOn) {
+  var a = accel * me.data.throttle; // <- grip ramp
+  me.data.xv += Math.sin(me.data.dir) * a * warp;
+  me.data.yv += Math.cos(me.data.dir) * a * warp;
+}
 
   // Optional reverse (your original didn’t really do this; keep if you want)
   if (down) {
