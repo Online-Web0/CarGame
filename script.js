@@ -38,7 +38,7 @@
   var STEER_SPEED = 0.12;
   var CAM_HEIGHT = 4;
 // ===== Drift tuning =====
-var DRIFT_GRIP = 0.86;      // lower = more slide
+var DRIFT_GRIP = 0.73;      // lower = more slide
 var NORMAL_GRIP = 0.96;
 var DRIFT_STEER_BOOST = 1.25;
 
