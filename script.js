@@ -417,8 +417,10 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
       var deg = parseFloat(sp[1] || "0");
       if (isFinite(deg)) {
 // Editor deg assumed: 0° = +X (right), 90° = +Y (up)
-// Game dir convention: 0 rad = +Y (forward)
-spawnDir = (Math.PI / 2) - (deg * Math.PI / 180);
+// Editor: 0°=+X, 90°=+Y (up). Game uses Y flipped via parseV2(x, -y).
+// Game forward is (sin(dir), cos(dir)), so dir must be θ + 90°.
+spawnDir = (deg * Math.PI / 180) + (Math.PI / 2);
+
         hasSpawn = true;
       }
 
