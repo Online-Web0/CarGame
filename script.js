@@ -1338,6 +1338,8 @@ spawnDir = Math.atan2(forward.x, forward.y);
       if (!code) return;
       connectToRoom(code, false);
     }
+inEl.disabled = true;
+joinBtn.style.display = "none";
 
     inEl.addEventListener("input", function () { inEl.value = inEl.value.toUpperCase(); });
     inEl.addEventListener("keydown", function (e) { if (e.key === "Enter") doJoin(); });
