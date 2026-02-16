@@ -1690,8 +1690,7 @@ function collideMeWithWallsRect() {
 
   var axes = axesFromDir(me.data.dir);
 
-  // Multiple passes = prevents tunneling
-  for (var pass = 0; pass < 4; pass++) {
+  for (var pass = 0; pass < 3; pass++) {
 
     for (var i = 0; i < wallSegs.length; i++) {
       var w = wallSegs[i];
@@ -1707,18 +1706,15 @@ function collideMeWithWallsRect() {
         if (nL.lengthSq() < 1e-9) continue;
         nL.normalize();
 
-        // Strong push-out
-        var push = (WALL_SIZE - res.dist) + 0.15;
-
+        var push = (WALL_SIZE - res.dist) + 0.08;
         var pushWorld = localToWorld(nL.multiplyScalar(push), axes);
         pWorld.add(pushWorld);
 
         var nW = pushWorld.clone().normalize();
 
-        // Remove velocity INTO wall (not bounce)
-        var vn = vWorld.dot(nW);
-        if (vn < 0) {
-          vWorld.sub(nW.multiplyScalar(vn));
+        // restore bounce physics
+        if (vWorld.dot(nW) < 0) {
+          vWorld = reflect2(vWorld, nW).multiplyScalar(BOUNCE);
         }
       }
     }
@@ -1729,6 +1725,7 @@ function collideMeWithWallsRect() {
   me.data.xv = vWorld.x;
   me.data.yv = vWorld.y;
 }
+
 
 
 
