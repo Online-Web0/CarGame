@@ -1333,11 +1333,16 @@ spawnDir = Math.atan2(forward.x, forward.y);
     joinBtn.style.zIndex = "99999";
     document.body.appendChild(joinBtn);
 
-    function doJoin() {
-      var code = (inEl.value || "").trim().toUpperCase();
-      if (!code) return;
-      connectToRoom(code, false);
-    }
+   function doJoin() {
+  var code = (inEl.value || "").trim().toUpperCase();
+  if (!code) return;
+
+  inEl.disabled = true;
+  joinBtn.style.display = "none";
+
+  connectToRoom(code, false);
+}
+
 inEl.disabled = true;
 joinBtn.style.display = "none";
 
