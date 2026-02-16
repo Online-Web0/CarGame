@@ -28,6 +28,20 @@
 // ===== Launch grip / throttle ramp =====
 var THROTTLE_RAMP_UP_SEC = 1.0;    // ~1 second to reach full accel
 var THROTTLE_RAMP_DOWN_SEC = 0.25; // how fast it drops when you release
+// ===== Drift / grip =====
+// Lower = more sliding / more pre-turn required
+var DRIFT_ALIGN_BASE = 0.030;        // how fast velocity aligns to heading (0.015–0.06)
+var DRIFT_ALIGN_TURN_MULT = 0.55;    // while steering, alignment gets WORSE (<1 = more drift)
+var DRIFT_ALIGN_NITRO_MULT = 0.40;   // nitro reduces grip (<1 = more drift)
+var DRIFT_ALIGN_SPEED_FALLOFF = 2.2; // higher = less grip at speed
+
+// Lateral scrub (how fast sideways motion dies)
+var SIDE_SCRUB = 0.055;              // 0.03–0.09
+var SIDE_SCRUB_TURN_MULT = 0.85;     // while steering, scrub slightly less -> longer drift
+var SIDE_SCRUB_NITRO_MULT = 0.75;    // nitro keeps sideways longer
+
+// Understeer at speed (higher = harder to turn when fast)
+var TURN_SPEED_FALLOFF = 3.0;        // 2–5 typical
 
   // ====== Nitro tuning ======
   var NITRO_MAX = 100;
@@ -1789,55 +1803,99 @@ if (nitro && nitroArmed && !nitroLock && nitroFuel > 0) {
   nitroFuel = Math.min(NITRO_MAX, nitroFuel + NITRO_REGEN * dtSec);
 }
 
-    // ===== Classic/original physics =====
+// ===== Classic/original physics + drift (velocity lag) =====
 if (USE_CLASSIC_PHYSICS) {
-  // Steering exactly like original
-  me.data.dir += (me.data.steer / CLASSIC_TURN_DIV) * warp;
 
-  // Throttle behavior
+  // Use whatever your real nitro flag is.
+  // If you don't have "usingNitro" defined elsewhere, use nitroActive:
+  var usingNitro = (typeof nitroActive !== "undefined") ? nitroActive : false;
+
+  // Understeer at speed
+  var sp0 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+  var steerScale = 1 / (1 + sp0 * TURN_SPEED_FALLOFF);
+
+  // Steering like original, but scaled by speed
+  me.data.dir += (me.data.steer / CLASSIC_TURN_DIV) * warp * steerScale;
+
+  // Throttle ONLY when pressing up (no auto-forward)
   var forwardOn = up;
-  var accel = SPEED; // use your new-script SPEED
-// Only accelerate when Up/W (since you removed auto-forward)
-var forwardOn = up;
+  var accel = SPEED;
 
-// Smooth throttle: ramps up over ~1s to simulate "getting grip"
-if (me.data.throttle === undefined) me.data.throttle = 0;
-
-var target = forwardOn ? 1 : 0;
-var ramp = (target > me.data.throttle) ? THROTTLE_RAMP_UP_SEC : THROTTLE_RAMP_DOWN_SEC;
-var k = clamp(dtSec / Math.max(ramp, 0.0001), 0, 1);
-me.data.throttle = me.data.throttle + (target - me.data.throttle) * k;
-
-  // Keep your nitro + slipstream multipliers if you want
-  if (nitroActive) accel *= 5.0;
+  // Keep your nitro + slip accel behavior
+  if (usingNitro) accel *= NITRO_MULT;
   if (slipFactor > 0.001) accel *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
 
-  // Forward accel (original always accelerates forward)
-if (forwardOn) {
-  var a = accel * me.data.throttle; // <- grip ramp
-  me.data.xv += Math.sin(me.data.dir) * a * warp;
-  me.data.yv += Math.cos(me.data.dir) * a * warp;
-}
+  // Forward accel
+  if (forwardOn) {
+    me.data.xv += Math.sin(me.data.dir) * accel * warp;
+    me.data.yv += Math.cos(me.data.dir) * accel * warp;
+  }
 
-  // Optional reverse (your original didn’t really do this; keep if you want)
+  // Optional reverse
   if (down) {
     me.data.xv -= Math.sin(me.data.dir) * accel * 2.3 * warp;
     me.data.yv -= Math.cos(me.data.dir) * accel * 2.3 * warp;
   }
 
-  // Drag exactly like original
+  // Drag like original
   var dragPow = Math.pow(CLASSIC_DRAG, warp);
   me.data.xv *= dragPow;
   me.data.yv *= dragPow;
 
-  // Optional speed cap (helps match old “terminal velocity”)
-  var sp = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+  // === DRIFT MODEL: velocity direction lags behind heading ===
+  var vx = me.data.xv, vy = me.data.yv;
+  var sp = Math.sqrt(vx * vx + vy * vy);
+
+  if (sp > 1e-6) {
+    // angles in your coordinate system (x=sin, y=cos)
+    var velAng = Math.atan2(vx, vy);
+    var fwdAng = me.data.dir;
+    var diff = wrapAngle(fwdAng - velAng);
+
+    // grip (lower => more drift)
+    var grip = DRIFT_ALIGN_BASE / (1 + sp * DRIFT_ALIGN_SPEED_FALLOFF);
+
+    if (Math.abs(me.data.steer) > 0.001) grip *= DRIFT_ALIGN_TURN_MULT;
+    if (usingNitro) grip *= DRIFT_ALIGN_NITRO_MULT;
+
+    // amount to align this frame
+    var align = clamp(grip * dtSec * 60, 0, 1);
+
+    // rotate velocity toward heading, but only partially => "pre-turn" needed
+    velAng += diff * align;
+
+    // rebuild velocity with same speed
+    vx = Math.sin(velAng) * sp;
+    vy = Math.cos(velAng) * sp;
+
+    // small sideways scrub (keeps it from drifting forever)
+    var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
+    var right = vec2(fwd.y, -fwd.x);
+
+    var vf = vx * fwd.x + vy * fwd.y;
+    var vl = vx * right.x + vy * right.y;
+
+    var scrub = SIDE_SCRUB;
+    if (Math.abs(me.data.steer) > 0.001) scrub *= SIDE_SCRUB_TURN_MULT;
+    if (usingNitro) scrub *= SIDE_SCRUB_NITRO_MULT;
+
+    vl *= Math.pow(1 - scrub, warp);
+
+    vx = fwd.x * vf + right.x * vl;
+    vy = fwd.y * vf + right.y * vl;
+
+    me.data.xv = vx;
+    me.data.yv = vy;
+  }
+
+  // Optional speed cap
   var cap = CLASSIC_MAX_SPEED;
-  if (nitroActive) cap *= 1.6;
+  if (usingNitro) cap *= 1.6;
   if (slipFactor > 0.001) cap *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
 
-  if (sp > cap && sp > 1e-9) {
-    var sc = cap / sp;
+  var sp2 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+  if (sp2 > cap && sp2 > 1e-9) {
+    var sc = cap / sp2;
     me.data.xv *= sc;
     me.data.yv *= sc;
   }
