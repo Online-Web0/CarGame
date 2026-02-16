@@ -1155,9 +1155,6 @@ spawnDir = Math.atan2(forward.x, forward.y);
   }
 
   function connectToRoom(code, hostFlag) {
-   function connectToRoom(code, hostFlag) {
-  if (meKey) return;
-
     ensureEngine();
 
     detachRoomListeners();
@@ -1335,21 +1332,9 @@ spawnDir = Math.atan2(forward.x, forward.y);
     joinBtn.style.zIndex = "99999";
     document.body.appendChild(joinBtn);
 
-    var hasJoined = false;
-
     function doJoin() {
-      if (hasJoined) return; // Prevent multiple joins
-      
       var code = (inEl.value || "").trim().toUpperCase();
       if (!code) return;
-      
-      hasJoined = true;
-      
-      // Disable the button and input
-      joinBtn.style.opacity = "0.5";
-      joinBtn.style.pointerEvents = "none";
-      if (inEl) inEl.disabled = true;
-      
       connectToRoom(code, false);
     }
 
@@ -1809,7 +1794,7 @@ spawnDir = Math.atan2(forward.x, forward.y);
       me.data.yv * Math.cos(me.data.dir);
 
       var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-    var steerSign = forwardSpeed >= 0 ? -1 : 1;
+    var steerSign = forwardSpeed >= 0 ? 1 : -1;
 
 me.data.dir += steerSign * me.data.steer *
   (STEER_MIN + speedMag * STEER_SPEED) * warp;
@@ -1941,29 +1926,27 @@ handleCheckpoints();
     me.ref.set(me.data);
   }
 
- // ====== Nitro UI ======
-function updateNitroUI() {
-  var barEl = document.getElementById("nitrobar");
-  var fillEl = document.getElementById("nitrofill");
-  var lblEl = document.getElementById("nitrolabel");
-  if (!barEl || !fillEl || !lblEl) return;
+  // ====== Nitro UI ======
+  function updateNitroUI() {
+    var barEl = document.getElementById("nitrobar");
+    var fillEl = document.getElementById("nitrofill");
+    var lblEl = document.getElementById("nitrolabel");
+    if (!barEl || !fillEl || !lblEl) return;
 
-  // Only show while in game
-  if (!gameStarted || !me) {
-    barEl.style.display = "none";
-    lblEl.style.display = "none";
-    return;
+    // Only visible while in game
+    if (gameStarted) {
+      barEl.style.display = "block";
+      lblEl.style.display = "block";
+    } else {
+      barEl.style.display = "none";
+      lblEl.style.display = "none";
+    }
+
+    if (nitroActive) barEl.classList.add("active");
+    else barEl.classList.remove("active");
+
+    fillEl.style.width = ((nitroFuel / NITRO_MAX) * 100) + "%";
   }
-
-  barEl.style.display = "block";
-  lblEl.style.display = "block";
-
-  if (nitroActive) barEl.classList.add("active");
-  else barEl.classList.remove("active");
-
-  fillEl.style.width = ((nitroFuel / NITRO_MAX) * 100) + "%";
-}
-
 
   // ====== Main loop ======
   var lastTime = 0;
