@@ -1155,7 +1155,6 @@ spawnDir = Math.atan2(forward.x, forward.y);
   }
 
   function connectToRoom(code, hostFlag) {
-   if (meKey) return;
     ensureEngine();
 
     detachRoomListeners();
@@ -1333,26 +1332,15 @@ spawnDir = Math.atan2(forward.x, forward.y);
     joinBtn.style.zIndex = "99999";
     document.body.appendChild(joinBtn);
 
-   function doJoin() {
-  var code = (inEl.value || "").trim().toUpperCase();
-  if (!code) return;
-
-  inEl.disabled = true;
-  joinBtn.style.display = "none";
-
-  connectToRoom(code, false);
-}
-
-inEl.disabled = true;
-joinBtn.style.display = "none";
+    function doJoin() {
+      var code = (inEl.value || "").trim().toUpperCase();
+      if (!code) return;
+      connectToRoom(code, false);
+    }
 
     inEl.addEventListener("input", function () { inEl.value = inEl.value.toUpperCase(); });
     inEl.addEventListener("keydown", function (e) { if (e.key === "Enter") doJoin(); });
-joinBtn.onclick = function () {
-  joinBtn.onclick = null;      // prevents re-joining
-  joinBtn.style.opacity = "0.5";
-  doJoin();
-};
+    joinBtn.onclick = doJoin;
   }
 
   function soloFlow() {
