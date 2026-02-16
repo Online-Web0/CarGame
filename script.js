@@ -1790,15 +1790,17 @@ spawnDir = Math.atan2(forward.x, forward.y);
     me.data.xv *= DRAG * brake;
     me.data.yv *= DRAG * brake;
 
-    var forwardSpeed =
-      me.data.xv * Math.sin(me.data.dir) +
-      me.data.yv * Math.cos(me.data.dir);
+  var forwardSpeed =
+  me.data.xv * Math.sin(me.data.dir) +
+  me.data.yv * Math.cos(me.data.dir);
 
-      var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-var steerSign = forwardSpeed >= 0 ? -1 : 1;
+var speedMag = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+
+var steerSign = forwardSpeed >= 0 ? 1 : -1;
 
 me.data.dir += steerSign * me.data.steer *
   (STEER_MIN + speedMag * STEER_SPEED) * warp;
+
     
     var topSpeed = usingNitro ? MAX_SPEED * 1.6 : MAX_SPEED;
     if (slipFactor > 0.001) topSpeed *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
