@@ -76,7 +76,7 @@
   // =========================
   // Set this to your car model URL (relative or absolute). Example:
   // var GLTF_CAR_URL = "./models/f1_car.glb";
-  var GLTF_CAR_URL = "models/scene.gltf";
+var GLTF_CAR_URL = "scene.gltf";
 var GLTF_CAR_SCALE = 0.45;
 var GLTF_CAR_ROT_Y = Math.PI;
 var GLTF_CAR_Y_OFFSET = 0.0;
@@ -335,18 +335,22 @@ var GLTF_CAR_Y_OFFSET = 0.0;
   var carGLTFLoading = false;
   var carGLTFWaiters = [];     // callbacks waiting for load (scene or null on fail)
 
-  function ensureGLTFLoader() {
-    if (gltfLoader) return;
-    if (!GLTF_CAR_URL) return;
-    if (typeof THREE === "undefined") return;
-    if (typeof THREE.GLTFLoader === "undefined") {
-      console.warn("GLTFLoader not found. Include THREE examples GLTFLoader.js or it will use the built-in car.");
-      return;
-    }
-    gltfLoader = new THREE.GLTFLoader();
+ function ensureGLTFLoader() {
+  if (gltfLoader) return;
+  if (!GLTF_CAR_URL) return;
+  if (typeof THREE === "undefined") return;
+
+  if (typeof THREE.GLTFLoader === "undefined") {
+    console.warn("GLTFLoader not found. Include GLTFLoader.js");
+    return;
   }
 
-  function preloadCarGLTF() {
+  gltfLoader = new THREE.GLTFLoader();
+  gltfLoader.setPath("models/");
+}
+
+function preloadCarGLTF() {
+
     if (!GLTF_CAR_URL) return;
     ensureGLTFLoader();
     if (!gltfLoader) return;
