@@ -45,7 +45,7 @@
   // ===== Original-like physics (classic) =====
   var USE_CLASSIC_PHYSICS = true;
   var CLASSIC_DRAG = 0.99;
-  var CLASSIC_TURN_DIV = 9;     // your preferred value
+  var CLASSIC_TURN_DIV = 5.5;     // your preferred value
   var CLASSIC_AUTO_FORWARD = false;
   var CLASSIC_MAX_SPEED = 0.40;
 
