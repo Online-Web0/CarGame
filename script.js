@@ -76,7 +76,7 @@
   // =========================
   // Set this to your car model URL (relative or absolute). Example:
   // var GLTF_CAR_URL = "./models/f1_car.glb";
-  var GLTF_CAR_URL = "models/Online-Web0/scene.gltf";
+  var GLTF_CAR_URL = "models/scene.gltf";
 var GLTF_CAR_SCALE = 0.45;
 var GLTF_CAR_ROT_Y = Math.PI;
 var GLTF_CAR_Y_OFFSET = 0.0;
