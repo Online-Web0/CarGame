@@ -400,8 +400,7 @@ function preloadCarGLTF() {
     }
 
     scene = new THREE.Scene();
-var ambient = new THREE.AmbientLight(0xffffff, 1.2);
-scene.add(ambient);
+
 
     scene.background = new THREE.Color(0x7fb0ff);
 
@@ -436,6 +435,9 @@ scene.add(ambient);
     camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 1, 2000);
     camera.position.set(0, CAM_HEIGHT, 10);
     scene.add(camera);
+var camLight = new THREE.PointLight(0xffffff, 0.6, 40);
+camLight.position.set(0, 6, 6);
+camera.add(camLight);
 
     var sun = new THREE.DirectionalLight(0xffffff, 0.75);
     sun.position.set(3000, 2000, -2000);
