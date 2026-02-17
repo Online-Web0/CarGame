@@ -102,7 +102,7 @@ var GLTF_MANUAL_SCALE = 0.3;
 
   // If your GLB faces the wrong way, adjust yaw visually without changing physics:
   // 0 = assumes model faces +Z when rotation.y = 0
-var GLTF_YAW_OFFSET = -Math.PI / 2;
+var GLTF_YAW_OFFSET = Math.PI / 2; // try +90°
 
   // If tinting breaks your textured model, set false.
   var GLTF_TINT_ENABLED = true;
@@ -1060,22 +1060,19 @@ function preloadCarGLTF() {
     }
 
     // If GLTF already loaded, use it immediately
-   if (carGLTFReady && carGLTF) {
-  var clone = carGLTF.clone(true);
-
-  // DEBUG SCALE
-  clone.scale.set(5, 5, 5);
-
-  // lift above ground
-  clone.position.y = 1;
-
-  // rotate forward
-  clone.rotation.y = Math.PI;
-
-  attachSlipFX(clone);
-  cb(clone);
+if (carGLTFReady && carGLTF) {
+  var model = buildGLTFCarInstance(hexColorInt);
+  if (!model) {
+    var built = makeBuiltInCar(hexColorInt);
+    built.userData.playerKey = playerKey;
+    cb(built);
+    return;
+  }
+  model.userData.playerKey = playerKey;
+  cb(model);
   return;
 }
+
 
 
 
