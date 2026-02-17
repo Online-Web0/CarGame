@@ -76,7 +76,10 @@
   // =========================
   // Set this to your car model URL (relative or absolute). Example:
   // var GLTF_CAR_URL = "./models/f1_car.glb";
-  var GLTF_CAR_URL = "./models/car.glb";
+  var GLTF_CAR_URL = "./models/Online-Web0/scene.gltf";
+var GLTF_CAR_SCALE = 0.45;
+var GLTF_CAR_ROT_Y = Math.PI;
+var GLTF_CAR_Y_OFFSET = 0.0;
 
   // --- GLTF fit controls (NEW) ---
   // Auto-fit hitbox to the GLTF model's bounding box (XZ). Stored per-player.
@@ -1054,12 +1057,18 @@
     }
 
     // If GLTF already loaded, use it immediately
-    if (carGLTFReady && carGLTF) {
-      var gl = buildGLTFCarInstance(hexColorInt) || makeBuiltInCar(hexColorInt);
-      gl.userData.playerKey = playerKey;
-      cb(gl);
-      return;
-    }
+   if (carGLTFReady && carGLTF) {
+  var clone = carGLTF.clone(true);
+
+  clone.scale.set(GLTF_CAR_SCALE, GLTF_CAR_SCALE, GLTF_CAR_SCALE);
+  clone.rotation.y += GLTF_CAR_ROT_Y;
+  clone.position.y += GLTF_CAR_Y_OFFSET;
+
+  attachSlipFX(clone);
+  cb(clone);
+  return;
+}
+
 
     // Otherwise: return built-in NOW (game never blocks),
     // then swap to GLTF when it finishes loading.
