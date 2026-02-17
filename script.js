@@ -940,13 +940,29 @@ spawnDir = wrapAngle(spawnDir);
 
     // clone raw gltf
     var raw = carGLTF.clone(true);
-    raw.traverse(function (o) {
-      if (o && o.isMesh) {
-        o.castShadow = true;
-        o.receiveShadow = true;
-        if (o.material) o.material.needsUpdate = true;
-      }
-    });
+   raw.traverse(function (o) {
+  if (!o || !o.isMesh) return;
+
+  o.castShadow = false;
+  o.receiveShadow = false;
+
+  if (!o.material) return;
+
+  function brighten(m) {
+    if (!m) return;
+    if (m.emissive !== undefined) {
+      m.emissive.set(0xffffff);
+      m.emissiveIntensity = 0.7;
+    }
+  }
+
+  if (Array.isArray(o.material)) {
+    o.material.forEach(brighten);
+  } else {
+    brighten(o.material);
+  }
+});
+
 
     // scale
     var scale = GLTF_MANUAL_SCALE;
