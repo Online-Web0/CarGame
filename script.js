@@ -53,8 +53,8 @@
   var TURN_SPEED_FALLOFF = 2.4; // your preferred value
 
   // ===== Drift/grip =====
-  var DRIFT_ALIGN_BASE = 0.020;        // lower = more drift
-  var DRIFT_ALIGN_TURN_MULT = 0.40;    // while steering, grip worse (<1 => more drift)
+  var DRIFT_ALIGN_BASE = 0.010;        // lower = more drift
+  var DRIFT_ALIGN_TURN_MULT = 0.30;    // while steering, grip worse (<1 => more drift)
   var DRIFT_ALIGN_NITRO_MULT = 0.40;   // nitro reduces grip (<1 => more drift)
   var DRIFT_ALIGN_SPEED_FALLOFF = 3.0; // higher = less grip at speed
 
