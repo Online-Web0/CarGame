@@ -79,8 +79,7 @@
 var GLTF_CAR_URL = "scene.gltf";
 var GLTF_CAR_SCALE = 0.45;
 var GLTF_CAR_ROT_Y = Math.PI;
-var GLTF_CAR_Y_OFFSET = 0.0;
-var GLTF_CAR_Y_OFFSET = 0.0;
+var GLTF_CAR_Y_OFFSET = 0.5;
   // --- GLTF fit controls (NEW) ---
   // Auto-fit hitbox to the GLTF model's bounding box (XZ). Stored per-player.
   var GLTF_AUTO_FIT_HITBOX = true;
@@ -103,7 +102,7 @@ var GLTF_CAR_Y_OFFSET = 0.0;
 
   // If your GLB faces the wrong way, adjust yaw visually without changing physics:
   // 0 = assumes model faces +Z when rotation.y = 0
-var GLTF_YAW_OFFSET = Math.PI;
+var GLTF_YAW_OFFSET = Math.PI / 2;
 
   // If tinting breaks your textured model, set false.
   var GLTF_TINT_ENABLED = true;
