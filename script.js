@@ -319,6 +319,46 @@ var GLTF_YAW_OFFSET = 0;
     }
     overlayMsgEl.innerHTML = html || "";
   }
+var uiScreenEl = null;
+
+function uiClearScreen() {
+  if (uiScreenEl) safeRemove(uiScreenEl);
+  uiScreenEl = null;
+  // also remove any old flow elements
+  safeRemove(document.getElementById("startgame"));
+  safeRemove(document.getElementById("code"));
+  safeRemove(document.getElementById("incode"));
+}
+
+function uiMakeScreen(titleText) {
+  uiClearScreen();
+  uiScreenEl = document.createElement("div");
+  uiScreenEl.className = "uiScreen";
+  if (foreEl) foreEl.appendChild(uiScreenEl);
+
+  var title = document.createElement("div");
+  title.className = "uiTitle";
+  title.textContent = titleText || "CarGame";
+  uiScreenEl.appendChild(title);
+
+  return uiScreenEl;
+}
+
+function uiBtn(text, onClick) {
+  var b = document.createElement("div");
+  b.className = "uiBtn";
+  b.textContent = text;
+  b.onclick = onClick;
+  uiScreenEl.appendChild(b);
+  return b;
+}
+
+function uiCard() {
+  var c = document.createElement("div");
+  c.className = "uiCard";
+  uiScreenEl.appendChild(c);
+  return c;
+}
 
   // =========================
   // ===== Engine init ========
@@ -454,6 +494,17 @@ function preloadCarGLTF() {
 
     // Grab existing UI nodes
     foreEl = document.getElementById("fore");
+  // Ensure overlay exists (menu renders here)
+if (!foreEl) {
+  foreEl = document.createElement("div");
+  foreEl.id = "fore";
+  foreEl.style.position = "fixed";
+  foreEl.style.inset = "0";
+  foreEl.style.zIndex = "10";
+  foreEl.style.pointerEvents = "auto";
+  document.body.appendChild(foreEl);
+}
+
     titleEl = document.getElementById("title");
     startEl = document.getElementById("start");
     nameEl = document.getElementById("name");
@@ -485,6 +536,59 @@ function preloadCarGLTF() {
         ".pLabel{position:fixed;transform:translate(-50%,-100%);color:#fff;font-family:'Press Start 2P',monospace;font-size:12px;pointer-events:none;text-shadow:0 2px 0 rgba(0,0,0,.55);z-index:4;white-space:nowrap;}";
       document.head.appendChild(st);
     }
+if (!document.getElementById("menuStyle")) {
+  var ms = document.createElement("style");
+  ms.id = "menuStyle";
+  ms.textContent = `
+    .uiScreen{
+      position:absolute; inset:0;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      gap:14px;
+      background:rgba(0,0,0,.35);
+      backdrop-filter: blur(6px);
+      font-family: 'Press Start 2P', monospace;
+      color:#fff;
+    }
+    .uiTitle{ font-size:32px; line-height:36px; text-shadow:0 3px 0 rgba(0,0,0,.45); margin-bottom:12px; }
+    .uiCard{
+      width:min(560px, 92vw);
+      padding:18px;
+      border:2px solid rgba(255,255,255,.85);
+      border-radius:16px;
+      background:rgba(0,0,0,.35);
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
+    }
+    .uiRow{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .uiLabel{ font-size:10px; opacity:.9; }
+    .uiInput{
+      flex:1;
+      padding:12px 12px;
+      border-radius:10px;
+      border:2px solid rgba(255,255,255,.75);
+      background:rgba(0,0,0,.25);
+      color:#fff;
+      outline:none;
+      font-family: 'Press Start 2P', monospace;
+      font-size:12px;
+    }
+    .uiBtn{
+      width:min(560px, 92vw);
+      padding:16px 16px;
+      border-radius:16px;
+      border:2px solid rgba(255,255,255,.9);
+      background:rgba(0,0,0,.25);
+      cursor:pointer;
+      text-align:center;
+      user-select:none;
+      transition: transform .06s ease, background .15s ease;
+    }
+    .uiBtn:hover{ background:rgba(255,255,255,.08); }
+    .uiBtn:active{ transform: translateY(2px); }
+    .uiSmall{ font-size:10px; opacity:.85; margin-top:8px; text-align:center; }
+  `;
+  document.head.appendChild(ms);
+}
 
     // Nitro UI style
     if (!document.getElementById("nitroStyle")) {
@@ -666,6 +770,97 @@ function preloadCarGLTF() {
 
     wallSegs.push({ a: a, b: b, dir: ab, len2: len2, mesh: mesh });
   }
+function showMainMenu() {
+  ensureEngine();
+  setupInputOnce();
+  setupColorPickerOnce();
+
+  gameStarted = false;
+
+  if (foreEl) {
+    foreEl.style.display = "";
+    foreEl.style.pointerEvents = "auto";
+  }
+
+  var s = uiMakeScreen("CarGame");
+
+  var card = uiCard();
+
+  // Name input (uses your existing nameEl if present, otherwise creates its own)
+  var row = document.createElement("div");
+  row.className = "uiRow";
+  card.appendChild(row);
+
+  var lbl = document.createElement("div");
+  lbl.className = "uiLabel";
+  lbl.textContent = "NAME";
+  row.appendChild(lbl);
+
+  var input = document.createElement("input");
+  input.className = "uiInput";
+  input.maxLength = 16;
+  input.value = (nameEl && nameEl.value) ? nameEl.value : "Player";
+  input.oninput = function () {
+    if (nameEl) nameEl.value = input.value; // sync to your existing field if it exists
+  };
+  row.appendChild(input);
+
+  var hint = document.createElement("div");
+  hint.className = "uiSmall";
+  hint.textContent = "Choose a mode:";
+  card.appendChild(hint);
+
+  uiBtn("SOLO", function () { uiClearScreen(); soloFlow(); });
+  uiBtn("MULTIPLAYER", function () { showMultiplayerMenu(); });
+
+  uiBtn("TRACK EDITOR", function () { window.open("./editor/", "_blank"); });
+}
+
+function showMultiplayerMenu() {
+  var s = uiMakeScreen("Multiplayer");
+  uiBtn("HOST", function () { uiClearScreen(); hostFlow(); });
+  uiBtn("JOIN", function () { showJoinMenu(); });
+  uiBtn("BACK", function () { showMainMenu(); });
+}
+
+function showJoinMenu() {
+  var s = uiMakeScreen("Join");
+
+  var card = uiCard();
+  var row = document.createElement("div");
+  row.className = "uiRow";
+  card.appendChild(row);
+
+  var lbl = document.createElement("div");
+  lbl.className = "uiLabel";
+  lbl.textContent = "CODE";
+  row.appendChild(lbl);
+
+  var codeIn = document.createElement("input");
+  codeIn.className = "uiInput";
+  codeIn.maxLength = 8;
+  codeIn.placeholder = "ABCD";
+  codeIn.autocomplete = "off";
+  codeIn.spellcheck = false;
+  row.appendChild(codeIn);
+
+  codeIn.addEventListener("input", function () { codeIn.value = codeIn.value.toUpperCase(); });
+  codeIn.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") doJoin();
+  });
+
+  function doJoin() {
+    var code = (codeIn.value || "").trim().toUpperCase();
+    if (!code) return;
+    uiClearScreen();
+    connectToRoom(code, false);
+  }
+
+  uiBtn("JOIN", doJoin);
+  uiBtn("BACK", function () { showMultiplayerMenu(); });
+
+  setTimeout(function () { codeIn.focus(); }, 0);
+}
 
   function addCheckpoint(a2, b2, isStart) {
     var a = a2.clone(), b = b2.clone();
@@ -1741,6 +1936,7 @@ if (carGLTFReady && carGLTF) {
     playerCollisionEnabled = false;
 
     hideAllMenusForGameplay();
+uiClearScreen();
 
     safeRemove(document.getElementById("incode"));
     safeRemove(document.getElementById("startgame"));
@@ -2391,10 +2587,9 @@ if (carGLTFReady && carGLTF) {
 
     buildMapFromTrackCode(getTrackCode());
 
-    if (startEl) startEl.onclick = showModeMenu;
+    showMainMenu();         // start on your new menu
+requestAnimationFrame(renderLoop);
 
-    animateMenuIn();
-    requestAnimationFrame(renderLoop);
   }
 
   if (document.readyState === "loading") {
