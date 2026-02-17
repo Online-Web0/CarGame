@@ -708,7 +708,7 @@ camera.add(camLight);
     trunk.receiveShadow = true;
 
     var top = new THREE.Mesh(
-      new THREE.ConeGeometry(0.9, 1.8, 10),
+      new THREE.ConeGeometry(0.9next, 1.8, 10),
       new THREE.MeshStandardMaterial({ color: 0x1f7a3a, roughness: 1 })
     );
     top.position.set(x, 2.0, y);
@@ -737,8 +737,9 @@ camera.add(camLight);
     spawnY = start.mid.y + forward.y * 5;
 
     // Inverse of fwd = (sin(dir), cos(dir))
-spawnDir = Math.atan2(forward.x, forward.y) + (Math.PI / 2) + Math.PI;
+spawnDir = Math.atan2(forward.x, forward.y);
 spawnDir = wrapAngle(spawnDir);
+
 
   }
 
