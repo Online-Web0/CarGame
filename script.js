@@ -737,8 +737,9 @@ camera.add(camLight);
     spawnY = start.mid.y + forward.y * 5;
 
     // Inverse of fwd = (sin(dir), cos(dir))
-spawnDir = Math.atan2(forward.x, forward.y);
+spawnDir = Math.atan2(forward.x, forward.y) + (Math.PI / 2) 
 spawnDir = wrapAngle(spawnDir);
+
 
 
   }
