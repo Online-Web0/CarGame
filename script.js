@@ -53,14 +53,13 @@
   var TURN_SPEED_FALLOFF = 2.4; // your preferred value
 
   // ===== Drift/grip =====
-  var DRIFT_ALIGN_BASE = 0.010;        // lower = more drift
-  var DRIFT_ALIGN_TURN_MULT = 0.30;    // while steering, grip worse (<1 => more drift)
-  var DRIFT_ALIGN_NITRO_MULT = 0.40;   // nitro reduces grip (<1 => more drift)
-  var DRIFT_ALIGN_SPEED_FALLOFF = 3.0; // higher = less grip at speed
+var DRIFT_ALIGN_BASE = 0.006;
+var DRIFT_ALIGN_TURN_MULT = 0.15;
+var DRIFT_ALIGN_NITRO_MULT = 0.35;
+var DRIFT_ALIGN_SPEED_FALLOFF = 4.0;
 
-  // Lateral scrub (how fast sideways motion dies)
-  var SIDE_SCRUB = 0.035;
-  var SIDE_SCRUB_TURN_MULT = 0.3;
+var SIDE_SCRUB = 0.012;
+var SIDE_SCRUB_TURN_MULT = 0.15;
   var SIDE_SCRUB_NITRO_MULT = 0.75;
 
   // ===== Car hitbox (rectangle) =====
