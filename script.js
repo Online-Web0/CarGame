@@ -577,7 +577,7 @@ camera.add(camLight);
 
         // Editor: 0°=+X, 90°=+Y. Game forward is (sin(dir), cos(dir)).
         // Correct conversion:
-        spawnDir = (deg + 180) * Math.PI / 180; // +90 more (right)
+        spawnDir = deg * Math.PI / 180; // +90 more (right)
 
 
         hasSpawn = true;
@@ -737,8 +737,9 @@ camera.add(camLight);
     spawnY = start.mid.y + forward.y * 5;
 
     // Inverse of fwd = (sin(dir), cos(dir))
-spawnDir = Math.atan2(forward.x, forward.y) + (Math.PI / 2) 
+spawnDir = Math.atan2(forward.x, forward.y);
 spawnDir = wrapAngle(spawnDir);
+
 
 
 
