@@ -400,7 +400,8 @@ function preloadCarGLTF() {
     }
 
     scene = new THREE.Scene();
-
+var ambient = new THREE.AmbientLight(0xffffff, 1.2);
+scene.add(ambient);
 
     scene.background = new THREE.Color(0x7fb0ff);
 
@@ -435,9 +436,6 @@ function preloadCarGLTF() {
     camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 1, 2000);
     camera.position.set(0, CAM_HEIGHT, 10);
     scene.add(camera);
-var camLight = new THREE.PointLight(0xffffff, 0.6, 40);
-camLight.position.set(0, 6, 6);
-camera.add(camLight);
 
     var sun = new THREE.DirectionalLight(0xffffff, 0.75);
     sun.position.set(3000, 2000, -2000);
@@ -577,7 +575,7 @@ camera.add(camLight);
 
         // Editor: 0°=+X, 90°=+Y. Game forward is (sin(dir), cos(dir)).
         // Correct conversion:
-        spawnDir = deg * Math.PI / 180; // +90 more (right)
+        spawnDir = (deg + 180) * Math.PI / 180; // +90 more (right)
 
 
         hasSpawn = true;
@@ -708,7 +706,7 @@ camera.add(camLight);
     trunk.receiveShadow = true;
 
     var top = new THREE.Mesh(
-      new THREE.ConeGeometry(0.9next, 1.8, 10),
+      new THREE.ConeGeometry(0.9, 1.8, 10),
       new THREE.MeshStandardMaterial({ color: 0x1f7a3a, roughness: 1 })
     );
     top.position.set(x, 2.0, y);
@@ -737,11 +735,8 @@ camera.add(camLight);
     spawnY = start.mid.y + forward.y * 5;
 
     // Inverse of fwd = (sin(dir), cos(dir))
-spawnDir = Math.atan2(forward.x, forward.y);
+spawnDir = Math.atan2(forward.x, forward.y) + (Math.PI / 2) + Math.PI;
 spawnDir = wrapAngle(spawnDir);
-
-
-
 
   }
 
