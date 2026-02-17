@@ -1060,14 +1060,20 @@ var GLTF_CAR_Y_OFFSET = 0.0;
    if (carGLTFReady && carGLTF) {
   var clone = carGLTF.clone(true);
 
-  clone.scale.set(GLTF_CAR_SCALE, GLTF_CAR_SCALE, GLTF_CAR_SCALE);
-  clone.rotation.y += GLTF_CAR_ROT_Y;
-  clone.position.y += GLTF_CAR_Y_OFFSET;
+  // DEBUG SCALE
+  clone.scale.set(5, 5, 5);
+
+  // lift above ground
+  clone.position.y = 1;
+
+  // rotate forward
+  clone.rotation.y = Math.PI;
 
   attachSlipFX(clone);
   cb(clone);
   return;
 }
+
 
 
     // Otherwise: return built-in NOW (game never blocks),
