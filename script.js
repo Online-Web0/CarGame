@@ -89,20 +89,20 @@ var GLTF_CAR_Y_OFFSET = 0.5;
   var GLTF_HITBOX_SCALE = 1.0;
 
   // Auto-scale GLTF to feel like your built-in car size (recommended).
-  var GLTF_AUTO_SCALE = true;
+var GLTF_AUTO_SCALE = false;
   // If auto-scaling, match the built-in car length (2*CAR_HALF_LENGTH) primarily.
-  var GLTF_TARGET_LENGTH = (2 * CAR_HALF_LENGTH);
+var GLTF_TARGET_LENGTH = (2 * CAR_HALF_LENGTH) * 0.75;
   // If auto-scaling, match width as a secondary clamp.
   var GLTF_TARGET_WIDTH = (2 * CAR_HALF_WIDTH);
   // If not auto-scaling, you can force a scale here:
-  var GLTF_MANUAL_SCALE = 1.0;
+var GLTF_MANUAL_SCALE = 0.3;
 
   // Auto-center GLTF pivot to its bbox center (recommended for stable rotation/collision feel).
   var GLTF_AUTO_CENTER = true;
 
   // If your GLB faces the wrong way, adjust yaw visually without changing physics:
   // 0 = assumes model faces +Z when rotation.y = 0
-var GLTF_YAW_OFFSET = Math.PI / 2;
+var GLTF_YAW_OFFSET = -Math.PI / 2;
 
   // If tinting breaks your textured model, set false.
   var GLTF_TINT_ENABLED = true;
