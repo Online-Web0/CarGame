@@ -177,298 +177,6 @@ var GLTF_YAW_OFFSET = 0;
   var players = {};
   var meKey = null;
   var me = null;
-diff --git a/menu_patch.js b/menu_patch.js
-new file mode 100644
-index 0000000000000000000000000000000000000000..dfcad07d7a0d210d4e7b0d29feca47175228ba77
---- /dev/null
-+++ b/menu_patch.js
-@@ -0,0 +1,286 @@
-+// In-game Menu + Host Settings Patch
-+// Intended to be merged inside your existing game IIFE (same scope as players/me/roomRef/renderLoop).
-+
-+/* ===== Added state ===== */
-+var hostKey = null;
-+var settingsRef = null;
-+var hostRef = null;
-+var resetRef = null;
-+
-+var ROOM_SETTINGS_DEFAULTS = {
-+  infiniteNitro: false,
-+  speedMult: 1.0,
-+  topSpeedMult: 1.0,
-+  playerCollisions: true
-+};
-+
-+var ROOM_SETTINGS = {
-+  infiniteNitro: false,
-+  speedMult: 1.0,
-+  topSpeedMult: 1.0,
-+  playerCollisions: true
-+};
-+
-+var menuVisible = false;
-+var menuDirty = true;
-+var menuBtnEl = null;
-+var menuPanelEl = null;
-+
-+function amIHost() {
-+  if (meKey === "solo") return true;
-+  return !!meKey && !!hostKey && meKey === hostKey;
-+}
-+
-+function markMenuDirty() {
-+  menuDirty = true;
-+}
-+
-+function getPlayerNameByKey(key) {
-+  var p = players[key];
-+  if (p && p.data && p.data.name) return p.data.name;
-+  return "Player";
-+}
-+
-+function getHostName() {
-+  if (!hostKey) return "Unknown";
-+  return getPlayerNameByKey(hostKey);
-+}
-+
-+function resetMyCarToSpawn() {
-+  if (!me || !me.data) return;
-+  me.data.x = spawnX;
-+  me.data.y = spawnY;
-+  me.data.xv = 0;
-+  me.data.yv = 0;
-+  me.data.dir = spawnDir;
-+  me.data.steer = 0;
-+  me.data.lap = 1;
-+  me.data.checkpoint = 0;
-+
-+  nitroFuel = NITRO_MAX;
-+  nitro = false;
-+  nitroArmed = false;
-+  nitroLock = false;
-+  nitroActive = false;
-+
-+  if (me.model) {
-+    var yawOff = (me.model.userData && me.model.userData.yawOffset) ? me.model.userData.yawOffset : 0;
-+    me.model.position.set(me.data.x, 0, me.data.y);
-+    me.model.rotation.y = me.data.dir + yawOff;
-+  }
-+
-+  if (me.ref) me.ref.set(me.data);
-+}
-+
-+function ensureGameMenuUI() {
-+  if (menuBtnEl && menuPanelEl) return;
-+
-+  if (!document.getElementById("ingameMenuStyle")) {
-+    var st = document.createElement("style");
-+    st.id = "ingameMenuStyle";
-+    st.textContent =
-+      "#menuBtn{position:fixed;top:12px;left:12px;z-index:100010;padding:8px 12px;border:2px solid #fff;background:rgba(0,0,0,.5);color:#fff;font-family:monospace;cursor:pointer;display:none}" +
-+      "#menuPanel{position:fixed;left:12px;top:52px;width:360px;max-height:78vh;overflow:auto;z-index:100011;background:rgba(0,0,0,.82);border:2px solid #fff;color:#fff;padding:10px 12px;font-family:monospace;display:none}" +
-+      "#menuPanel h3{margin:8px 0 6px;font-size:14px}" +
-+      "#menuPanel .row{display:flex;align-items:center;gap:6px;justify-content:space-between;margin:5px 0}" +
-+      "#menuPanel button{cursor:pointer}" +
-+      "#menuPanel input[type='number']{width:80px}";
-+    document.head.appendChild(st);
-+  }
-+
-+  menuBtnEl = document.createElement("button");
-+  menuBtnEl.id = "menuBtn";
-+  menuBtnEl.textContent = "MENU";
-+  menuBtnEl.onclick = function () { toggleGameMenu(); };
-+  document.body.appendChild(menuBtnEl);
-+
-+  menuPanelEl = document.createElement("div");
-+  menuPanelEl.id = "menuPanel";
-+  document.body.appendChild(menuPanelEl);
-+
-+  window.addEventListener("keydown", function (e) {
-+    var k = e.key;
-+    if (!gameStarted) return;
-+    if (k === "m" || k === "M" || k === "Escape" || k === "Tab") {
-+      e.preventDefault();
-+      toggleGameMenu();
-+    }
-+  });
-+}
-+
-+function toggleGameMenu(force) {
-+  if (!gameStarted) return;
-+  ensureGameMenuUI();
-+  if (typeof force === "boolean") menuVisible = force;
-+  else menuVisible = !menuVisible;
-+  markMenuDirty();
-+  refreshGameMenu();
-+}
-+
-+function renderPlayersSection(hostMode) {
-+  var html = "";
-+  for (var k in players) {
-+    if (!players.hasOwnProperty(k)) continue;
-+    var p = players[k];
-+    var nm = (p && p.data && p.data.name) ? p.data.name : "Player";
-+
-+    var tags = [];
-+    if (k === meKey) tags.push("YOU");
-+    if (k === hostKey || (k === "solo" && meKey === "solo")) tags.push("HOST");
-+
-+    html += '<div class="row"><span>' + nm + (tags.length ? " (" + tags.join(", ") + ")" : "") + "</span>";
-+
-+    if (hostMode && playersRef && k !== "solo") {
-+      html += '<button data-rename="' + k + '">Rename</button>';
-+    } else {
-+      html += "<span></span>";
-+    }
-+    html += "</div>";
-+  }
-+  return html;
-+}
-+
-+function refreshGameMenu() {
-+  ensureGameMenuUI();
-+
-+  var showMenuControls = !!gameStarted;
-+  menuBtnEl.style.display = showMenuControls ? "block" : "none";
-+
-+  if (!showMenuControls) {
-+    menuPanelEl.style.display = "none";
-+    return;
-+  }
-+
-+  if (!menuVisible) {
-+    menuPanelEl.style.display = "none";
-+    return;
-+  }
-+
-+  if (!menuDirty) return;
-+  menuDirty = false;
-+
-+  var hostMode = amIHost();
-+  var roomCodeText = ROOM ? ROOM : "SOLO";
-+  var hostName = meKey === "solo" ? (me && me.data ? me.data.name : "Player") : getHostName();
-+
-+  var html = "";
-+  html += "<h3>Room Info</h3>";
-+  html += '<div class="row"><span>Code</span><strong>' + roomCodeText + "</strong></div>";
-+  html += '<div class="row"><span>Host</span><strong>' + hostName + "</strong></div>";
-+
-+  html += "<h3>Players</h3>";
-+  html += renderPlayersSection(hostMode);
-+
-+  html += "<h3>Host Settings</h3>";
-+  html += '<div class="row"><label><input id="setInfiniteNitro" type="checkbox" ' + (ROOM_SETTINGS.infiniteNitro ? "checked" : "") + (hostMode ? "" : " disabled") + "> Infinite Nitro</label><span></span></div>";
-+  html += '<div class="row"><span>Speed Mult</span><input id="setSpeedMult" type="number" step="0.05" min="0.1" max="5" value="' + ROOM_SETTINGS.speedMult + '"' + (hostMode ? "" : " disabled") + "></div>";
-+  html += '<div class="row"><span>Top Speed Mult</span><input id="setTopSpeedMult" type="number" step="0.05" min="0.1" max="5" value="' + ROOM_SETTINGS.topSpeedMult + '"' + (hostMode ? "" : " disabled") + "></div>";
-+  html += '<div class="row"><label><input id="setPlayerCollisions" type="checkbox" ' + (ROOM_SETTINGS.playerCollisions ? "checked" : "") + (hostMode ? "" : " disabled") + "> Player Collisions</label><span></span></div>";
-+
-+  if (hostMode) {
-+    html += '<div class="row"><button id="resetRaceBtn">RESET RACE</button><span></span></div>';
-+  }
-+
-+  menuPanelEl.innerHTML = html;
-+  menuPanelEl.style.display = "block";
-+
-+  if (hostMode && settingsRef) {
-+    var inf = document.getElementById("setInfiniteNitro");
-+    var spd = document.getElementById("setSpeedMult");
-+    var top = document.getElementById("setTopSpeedMult");
-+    var col = document.getElementById("setPlayerCollisions");
-+    var rst = document.getElementById("resetRaceBtn");
-+
-+    if (inf) inf.onchange = function () { settingsRef.child("infiniteNitro").set(!!inf.checked); };
-+    if (spd) spd.onchange = function () { settingsRef.child("speedMult").set(Math.max(0.1, parseFloat(spd.value) || 1)); };
-+    if (top) top.onchange = function () { settingsRef.child("topSpeedMult").set(Math.max(0.1, parseFloat(top.value) || 1)); };
-+    if (col) col.onchange = function () { settingsRef.child("playerCollisions").set(!!col.checked); };
-+    if (rst) rst.onclick = function () { if (resetRef) resetRef.set(Date.now()); };
-+  }
-+
-+  if (hostMode && playersRef) {
-+    var btns = menuPanelEl.querySelectorAll("button[data-rename]");
-+    for (var i = 0; i < btns.length; i++) {
-+      btns[i].onclick = function () {
-+        var key = this.getAttribute("data-rename");
-+        var cur = getPlayerNameByKey(key);
-+        var next = prompt("Rename player:", cur);
-+        if (typeof next !== "string") return;
-+        next = next.trim();
-+        if (!next) return;
-+        playersRef.child(key).child("name").set(next);
-+        if (players[key] && players[key].label) players[key].label.textContent = next;
-+        markMenuDirty();
-+      };
-+    }
-+  }
-+}
-+
-+function attachRoomMetaListeners() {
-+  if (!roomRef || !database) return;
-+
-+  settingsRef = roomRef.child("settings");
-+  hostRef = roomRef.child("hostKey");
-+  resetRef = roomRef.child("resetAt");
-+
-+  hostRef.on("value", function (snap) {
-+    hostKey = snap.val() || null;
-+    markMenuDirty();
-+  });
-+
-+  settingsRef.on("value", function (snap) {
-+    var s = snap.val();
-+    if (!s) {
-+      if (amIHost()) settingsRef.set(ROOM_SETTINGS_DEFAULTS);
-+      s = ROOM_SETTINGS_DEFAULTS;
-+    }
-+
-+    ROOM_SETTINGS.infiniteNitro = !!s.infiniteNitro;
-+    ROOM_SETTINGS.speedMult = Math.max(0.1, parseFloat(s.speedMult) || 1.0);
-+    ROOM_SETTINGS.topSpeedMult = Math.max(0.1, parseFloat(s.topSpeedMult) || 1.0);
-+    ROOM_SETTINGS.playerCollisions = !!s.playerCollisions;
-+    markMenuDirty();
-+  });
-+
-+  resetRef.on("value", function (snap) {
-+    if (!snap.val()) return;
-+    resetMyCarToSpawn();
-+    markMenuDirty();
-+  });
-+}
-+
-+/*
-+INTEGRATION POINTS (exact edits in existing file):
-+1) In connectToRoom(code, hostFlag), after roomRef/playersRef/startRef are assigned:
-+   - if (hostFlag && meKey) roomRef.child("hostKey").set(meKey);
-+   - attachRoomMetaListeners();
-+
-+2) In createLocalPlayerFirebase(), after meKey = ref.key:
-+   - if (isHost && roomRef) roomRef.child("hostKey").set(meKey);
-+
-+3) In soloFlow(), after meKey = "solo":
-+   - hostKey = meKey;
-+   - ROOM_SETTINGS = Object.assign({}, ROOM_SETTINGS_DEFAULTS);
-+
-+4) In collideWithPlayers(), first line:
-+   - if (!ROOM_SETTINGS.playerCollisions) return;
-+
-+5) In updateMePhysics(warp, dtSec):
-+   Nitro block:
-+   - if (ROOM_SETTINGS.infiniteNitro) { nitroFuel = NITRO_MAX; nitroActive = !!nitro; nitroLock = false; nitroArmed = nitro; }
-+   - else keep existing logic.
-+
-+   Accel block:
-+   - var accel = SPEED * ROOM_SETTINGS.speedMult;
-+
-+   Cap block:
-+   - var cap = CLASSIC_MAX_SPEED * ROOM_SETTINGS.topSpeedMult;
-+
-+6) In startGame() call ensureGameMenuUI() + markMenuDirty().
-+
-+7) In upsertPlayer/removePlayer/player list updates/startRef/host/settings/reset listeners:
-+   - call markMenuDirty();
-+
-+8) In renderLoop(ts), near HUD update path:
-+   - refreshGameMenu();
-+*/
 
   var gameStarted = false;
   var gameSortaStarted = false;
@@ -1803,7 +1511,6 @@ if (carGLTFReady && carGLTF) {
     roomRef = database.ref("rooms/" + ROOM);
     playersRef = roomRef.child("players");
     startRef = roomRef.child("startedAt");
-attachRoomMetaListeners();
 
     createLocalPlayerFirebase();
 
@@ -1820,12 +1527,10 @@ attachRoomMetaListeners();
       if (!data) return;
       upsertPlayer(key, data);
     });
-markMenuDirty();
 
     playersRef.on("child_removed", function (snap) {
       removePlayer(snap.key);
     });
-markMenuDirty();
 
     startRef.on("value", function (snap) {
       var startedAt = snap.val();
@@ -1844,12 +1549,6 @@ markMenuDirty();
 
     var ref = playersRef.push();
     meKey = ref.key;
-if (isHost && roomRef && meKey) {
-  roomRef.child("hostKey").transaction(function(cur){
-    return cur || meKey;
-  });
-}
-
 
     var data = {
       name: nm,
@@ -2002,8 +1701,6 @@ if (isHost && roomRef && meKey) {
 
     var nm = (nameEl && nameEl.value ? nameEl.value : "Player").trim() || "Player";
     meKey = "solo";
-hostKey = meKey;
-ROOM_SETTINGS = Object.assign({}, ROOM_SETTINGS_DEFAULTS);
 
     var data = {
       name: nm,
@@ -2042,8 +1739,6 @@ ROOM_SETTINGS = Object.assign({}, ROOM_SETTINGS_DEFAULTS);
 
     gameStarted = true;
     playerCollisionEnabled = false;
-ensureGameMenuUI();
-markMenuDirty();
 
     hideAllMenusForGameplay();
 
@@ -2245,8 +1940,6 @@ markMenuDirty();
   }
 
   function collideWithPlayers() {
-if (!ROOM_SETTINGS.playerCollisions) return;
-
     if (!playerCollisionEnabled || !me) return;
 
     var aCenter = vec2(me.data.x, me.data.y);
@@ -2393,29 +2086,22 @@ if (!ROOM_SETTINGS.playerCollisions) return;
       if (!(left ^ right)) me.data.steer = 0;
     }
     me.data.steer = clamp(me.data.steer, -STEER_MAX, STEER_MAX);
-// Nitro state
-nitroActive = false;
 
-if (ROOM_SETTINGS.infiniteNitro) {
-  nitroFuel = NITRO_MAX;
-  nitroLock = false;
-  nitroArmed = nitro;
-  nitroActive = !!nitro;
-} else {
-  if (nitro && nitroArmed && !nitroLock && nitroFuel > 0) {
-    nitroActive = true;
-    nitroFuel -= NITRO_DRAIN * dtSec;
+    // Nitro state
+    nitroActive = false;
+    if (nitro && nitroArmed && !nitroLock && nitroFuel > 0) {
+      nitroActive = true;
+      nitroFuel -= NITRO_DRAIN * dtSec;
 
-    if (nitroFuel <= 0) {
-      nitroFuel = 0;
-      nitroLock = true;
-      nitroArmed = false;
-      nitroActive = false;
+      if (nitroFuel <= 0) {
+        nitroFuel = 0;
+        nitroLock = true;
+        nitroArmed = false;
+        nitroActive = false;
+      }
+    } else {
+      nitroFuel = Math.min(NITRO_MAX, nitroFuel + NITRO_REGEN * dtSec);
     }
-  } else {
-    nitroFuel = Math.min(NITRO_MAX, nitroFuel + NITRO_REGEN * dtSec);
-  }
-}
 
     if (USE_CLASSIC_PHYSICS) {
       var usingNitro = nitroActive;
@@ -2430,7 +2116,7 @@ if (ROOM_SETTINGS.infiniteNitro) {
 
       // throttle
       var forwardOn = up;
-      var accel = SPEED * ROOM_SETTINGS.speedMult;
+      var accel = SPEED;
 
       if (usingNitro) accel *= NITRO_MULT;
       if (slipFactor > 0.001) accel *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
@@ -2489,7 +2175,7 @@ if (ROOM_SETTINGS.infiniteNitro) {
       }
 
       // speed cap
-      var cap = CLASSIC_MAX_SPEED * ROOM_SETTINGS.topSpeedMult;
+      var cap = CLASSIC_MAX_SPEED;
       if (usingNitro) cap *= 1.6;
       if (slipFactor > 0.001) cap *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
 
@@ -2683,7 +2369,6 @@ if (ROOM_SETTINGS.infiniteNitro) {
       slipFactor = 0;
       updateSlipstreamVisuals(ts);
       updateNitroUI();
-     refreshGameMenu();
     }
 
     updateLabels();
