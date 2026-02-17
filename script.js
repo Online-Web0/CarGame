@@ -400,8 +400,7 @@ function preloadCarGLTF() {
     }
 
     scene = new THREE.Scene();
-var ambient = new THREE.AmbientLight(0xffffff, 1.2);
-scene.add(ambient);
+
 
     scene.background = new THREE.Color(0x7fb0ff);
 
