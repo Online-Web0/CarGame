@@ -79,7 +79,7 @@
 var GLTF_CAR_URL = "scene.gltf";
 var GLTF_CAR_SCALE = 0.45;
 var GLTF_CAR_ROT_Y = Math.PI;
-var GLTF_CAR_Y_OFFSET = 3.75;
+var GLTF_CAR_Y_OFFSET = 0.02; // tiny lift to avoid z-fighting
   // --- GLTF fit controls (NEW) ---
   // Auto-fit hitbox to the GLTF model's bounding box (XZ). Stored per-player.
   var GLTF_AUTO_FIT_HITBOX = true;
@@ -572,7 +572,8 @@ function preloadCarGLTF() {
 
         // Editor: 0°=+X, 90°=+Y. Game forward is (sin(dir), cos(dir)).
         // Correct conversion:
-        spawnDir = (deg + 90) * Math.PI / 180;
+        spawnDir = (deg + 180) * Math.PI / 180; // +90 more (right)
+
 
         hasSpawn = true;
       }
@@ -731,7 +732,8 @@ function preloadCarGLTF() {
     spawnY = start.mid.y + forward.y * 5;
 
     // Inverse of fwd = (sin(dir), cos(dir))
-    spawnDir = Math.atan2(forward.x, forward.y);
+    spawnDir = Math.atan2(forward.x, forward.y) + (Math.PI / 2);
+
   }
 
   // =========================
@@ -981,6 +983,16 @@ function preloadCarGLTF() {
       raw.position.sub(center);
       raw.updateMatrixWorld(true);
     }
+// --- ground the model so its lowest point sits on y=0 ---
+raw.updateMatrixWorld(true);
+var bbY = new THREE.Box3().setFromObject(raw);
+var minY = bbY.min.y;
+
+// move model up/down so bbox bottom is at y=0, then apply small offset
+raw.position.y -= minY;
+raw.position.y += (GLTF_CAR_Y_OFFSET || 0);
+
+raw.updateMatrixWorld(true);
 
     // fit hitbox from raw only (NO slipfx included)
     var halfW = CAR_HALF_WIDTH;
