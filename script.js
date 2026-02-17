@@ -66,7 +66,7 @@
   // ===== Car hitbox (rectangle) =====
   // Built-in fallback dimensions. GLTF can auto-fit and override per player.
   var CAR_HALF_WIDTH = 1.08;
-  var CAR_HALF_LENGTH = 2.25;
+  var CAR_HALF_LENGTH = 1.85;
 
   // ===== Steering max (your value) =====
   var STEER_MAX = Math.PI / 5.4;
