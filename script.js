@@ -1,101 +1,102 @@
 // CarGame - script.js (single file, no dependencies beyond three.js + firebase)
-// Features:
-// - F1 car model
-// - rectangular hitbox (car vs walls, car vs car)
-// - reverse steering behavior (left/right as you specified)
-// - nitro lockout system (must release Shift to re-arm after empty)
-// - nitro bar always visible but only when in game
-// - slipstream boost + visuals
-// - boost FOV camera effect
-// - multiplayer sync (Firebase RTDB; anonymous auth; solo fallback)
+// - Optional GLTF car (set GLTF_CAR_URL). Falls back to built-in F1.
+// - Rectangular hitbox collisions (walls + cars)
+// - Reverse steering behavior (left/right as specified)
+// - Nitro lockout (must release Shift to re-arm after empty)
+// - Nitro bar visible only in game
+// - Slipstream boost + visuals
+// - Boost FOV camera effect
+// - Multiplayer sync (Firebase RTDB; anonymous auth; solo fallback)
 
 (function () {
   "use strict";
 
-  // ====== TUNING (your values kept) ======
+  // =========================
+  // ===== USER TUNING =======
+  // =========================
   var SPEED = 0.016;
   var CAMERA_LAG = 0.82;
-  var COLLISION = 1.1;
+  var COLLISION = 1.1;      // (optional) used if you want to scale player collision push; kept for compatibility
   var BOUNCE = 1.45;
   var mapscale = 500;
   var VR = false;
   var BOUNCE_CORRECT = 0.01;
-  var WALL_SIZE = 0.35;       // used as wall "thickness" margin for collision
+
+  // wall collision thickness margin (smaller = tighter)
+  var WALL_SIZE = 0.35;
+
   var MOUNTAIN_DIST = 2500;
   var OOB_DIST = 2000;
   var LAPS = 3;
+
+  // ===== Nitro tuning =====
   var NITRO_MULT = 2.0;
-// ===== Launch grip / throttle ramp =====
-var THROTTLE_RAMP_UP_SEC = 1.0;    // ~1 second to reach full accel
-var THROTTLE_RAMP_DOWN_SEC = 0.25; // how fast it drops when you release
-// ===== Drift / grip =====
-// Lower = more sliding / more pre-turn required
-var DRIFT_ALIGN_BASE = 0.020;        // how fast velocity aligns to heading (0.015â€“0.06)
-var DRIFT_ALIGN_TURN_MULT = 0.40;    // while steering, alignment gets WORSE (<1 = more drift)
-var DRIFT_ALIGN_NITRO_MULT = 0.40;   // nitro reduces grip (<1 = more drift)
-var DRIFT_ALIGN_SPEED_FALLOFF = 3.0; // higher = less grip at speed
-
-// Lateral scrub (how fast sideways motion dies)
-var SIDE_SCRUB = 0.035;              // 0.03â€“0.09
-var SIDE_SCRUB_TURN_MULT = 0.3;     // while steering, scrub slightly less -> longer drift
-var SIDE_SCRUB_NITRO_MULT = 0.75;    // nitro keeps sideways longer
-
-// Understeer at speed (higher = harder to turn when fast)
-var TURN_SPEED_FALLOFF = 1.7; 
-
-  // ====== Nitro tuning ======
   var NITRO_MAX = 100;
   var nitroFuel = NITRO_MAX;
   var NITRO_DRAIN = 45;   // per second
   var NITRO_REGEN = 15;   // per second
 
-  // ====== Movement tuning ======
+  // ===== Movement tuning =====
   var MAX_SPEED = 0.30;
   var STEER_MIN = 0.05;
   var STEER_SPEED = 0.12;
   var CAM_HEIGHT = 4;
-// ===== Original-like physics (classic) =====
-var USE_CLASSIC_PHYSICS = true;
 
-// Original had xv *= 0.99^warp
-var CLASSIC_DRAG = 0.99;
+  // ===== Original-like physics (classic) =====
+  var USE_CLASSIC_PHYSICS = true;
+  var CLASSIC_DRAG = 0.99;
+  var CLASSIC_TURN_DIV = 9;     // your preferred value
+  var CLASSIC_AUTO_FORWARD = false;
+  var CLASSIC_MAX_SPEED = 0.40;
 
-// Original had dir += steer/10 * warp
-var CLASSIC_TURN_DIV = 7;  
+  // Understeer at speed (higher = harder to turn fast)
+  var TURN_SPEED_FALLOFF = 2.4; // your preferred value
 
-// Original basically always moved forward
-var CLASSIC_AUTO_FORWARD = false;
+  // ===== Drift/grip =====
+  var DRIFT_ALIGN_BASE = 0.020;        // lower = more drift
+  var DRIFT_ALIGN_TURN_MULT = 0.40;    // while steering, grip worse (<1 => more drift)
+  var DRIFT_ALIGN_NITRO_MULT = 0.40;   // nitro reduces grip (<1 => more drift)
+  var DRIFT_ALIGN_SPEED_FALLOFF = 3.0; // higher = less grip at speed
 
-// Optional cap (original equilibrium speed was ~SPEED*(0.99/0.01) â‰ˆ SPEED*99)
-// Example: SPEED=0.004 => ~0.396. Scale to taste in your new world.
-var CLASSIC_MAX_SPEED = 0.40;
+  // Lateral scrub (how fast sideways motion dies)
+  var SIDE_SCRUB = 0.035;
+  var SIDE_SCRUB_TURN_MULT = 0.3;
+  var SIDE_SCRUB_NITRO_MULT = 0.75;
 
+  // ===== Car hitbox (rectangle) =====
+  var CAR_HALF_WIDTH = 1.08;
+  var CAR_HALF_LENGTH = 2.25;
 
-  // ====== Car hitbox (rectangle) ======
-var CAR_HALF_WIDTH = 1.08;   // wheel-to-wheel
-var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
+  // ===== Steering max (your value) =====
+  var STEER_MAX = Math.PI / 5.4;
 
+  // =========================
+  // ===== OPTIONAL GLTF =====
+  // =========================
+  // Set this to your car model URL (relative or absolute). Example:
+  // var GLTF_CAR_URL = "./models/f1_car.glb";
+  var GLTF_CAR_URL = ""; // leave "" to use built-in car
 
-  function MODS() {}
-
-  // ====== Nitro input/state (edge-trigger + lockout) ======
+  // =========================
+  // ===== Nitro input/state ==
+  // =========================
   var nitro = false;          // Shift currently held
   var nitroArmed = false;     // set true on a fresh Shift press
   var nitroLock = false;      // locks after fuel hits 0 until Shift released
   var nitroActive = false;    // true only while boost actually applies
 
-  // ====== Slipstream tuning ======
+  // ===== Slipstream tuning =====
   var SLIP_DIST = 11.0;
   var SLIP_WIDTH = 2.2;
   var SLIP_ACCEL_BONUS = 0.70;
   var SLIP_TOPSPEED_BONUS = 0.22;
-  var SLIP_DRAG_REDUCE = 0.007;
-  var SLIP_PUSH = 0.90;
 
   var slipTargetKey = null;
   var slipFactor = 0;
 
-  // ====== Firebase connection ======
+  // =========================
+  // ===== Firebase ==========
+  // =========================
   var database = null;
   var firebaseOK = false;
 
@@ -124,17 +125,19 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
     console.warn("Firebase init failed (solo still works):", e);
   }
 
-  // ====== Three.js globals ======
+  // =========================
+  // ===== Three.js globals ===
+  // =========================
   var scene, renderer, camera;
   var mapGroup, cpGroup, decoGroup;
   var ground;
 
-  // ====== Map physics data ======
+  // ===== Map physics data =====
   var wallSegs = [];  // {a:V2,b:V2,dir:V2,len2:number,mesh:Mesh}
   var cpSegs = [];    // checkpoints; [0]=start line
   var spawnX = 0, spawnY = 0, spawnDir = 0;
 
-  // ====== Multiplayer/game state ======
+  // ===== Multiplayer/game state =====
   var ROOM = null;
   var isHost = false;
   var roomRef = null;
@@ -149,14 +152,14 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
   var gameSortaStarted = false;
   var playerCollisionEnabled = false;
 
-  // ====== Input state ======
+  // ===== Input state =====
   var left = false;
   var right = false;
   var up = false;
   var down = false;
   var mobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  // ====== UI elements ======
+  // ===== UI elements =====
   var foreEl, titleEl, startEl, nameEl, pickerEl, sliderEl, countdownEl, lapEl, settingsEl, toolbarEl;
   var modeWrapEl = null;
   var overlayMsgEl = null;
@@ -164,7 +167,9 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
   // Global color
   var color = "#ff3030";
 
-  // ====== Utility ======
+  // =========================
+  // ===== Utilities =========
+  // =========================
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function safeRemove(el) { if (!el) return; try { el.remove(); } catch (e) {} }
 
@@ -175,33 +180,23 @@ var CAR_HALF_LENGTH = 2.25;  // nose to rear wing
     if (typeof text === "string") d.innerHTML = text;
     return d;
   }
-function wrapAngle(a) {
-  a = (a + Math.PI) % (2 * Math.PI);
-  if (a < 0) a += 2 * Math.PI;
-  return a - Math.PI;
-}
-
-// Your angle system is 0=+Y and uses (sin,cos), so +angle is "clockwise".
-// This rotates a vector by a clockwise-positive angle.
-function rotateVecCW(v, ang) {
-  var c = Math.cos(ang), s = Math.sin(ang);
-  return vec2(v.x * c + v.y * s, -v.x * s + v.y * c);
-}
-
-// ===== Drift behavior tuning =====
-// Lower ALIGN = more drift (velocity stays independent longer)
-var ALIGN_GRIP_BASE = 0.08;      // 0.05â€“0.12
-var ALIGN_GRIP_WHEN_TURNING = 0.55; // how much alignment drops while steering (0â€“0.8)
-var SIDE_SCRUB_BASE = 0.06;      // lateral damping (0.03â€“0.12)
-var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€“0.30)
 
   function vec2(x, y) { return new THREE.Vector2(x, y); }
+
+  function wrapAngle(a) {
+    a = (a + Math.PI) % (2 * Math.PI);
+    if (a < 0) a += 2 * Math.PI;
+    return a - Math.PI;
+  }
 
   function reflect2(v, n) {
     var d = v.dot(n);
     return v.clone().sub(n.clone().multiplyScalar(2 * d));
   }
 
+  // =========================
+  // ===== Track code =========
+  // =========================
   function getTrackCode() {
     var el = document.getElementById("trackcode");
     if (!el) return "";
@@ -216,7 +211,7 @@ var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€
   }
   window.setTrackCode = setTrackCode;
 
-  // ====== Coordinate parsing ======
+  // ===== Coordinate parsing =====
   var MIRROR_X = false;
 
   function parseV2(tok) {
@@ -240,7 +235,9 @@ var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€
     return { a: a, b: b };
   }
 
-  // ====== UI visibility helpers ======
+  // =========================
+  // ===== UI helpers =========
+  // =========================
   function setDisplay(id, val) {
     var el = document.getElementById(id);
     if (el) el.style.display = val;
@@ -267,7 +264,6 @@ var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€
 
   function hideAllMenusForGameplay() {
     clearModeUI();
-
     safeRemove(document.getElementById("modewrap"));
 
     setDisplay("title", "none");
@@ -275,7 +271,7 @@ var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€
 
     if (foreEl) {
       foreEl.style.pointerEvents = "none";
-      foreEl.style.display = "none"; // important: fully hide overlay container if present
+      foreEl.style.display = "none";
     }
     if (settingsEl) settingsEl.style.display = "none";
     if (toolbarEl) toolbarEl.classList.remove("sel");
@@ -294,9 +290,74 @@ var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€
     overlayMsgEl.innerHTML = html || "";
   }
 
-  // ====== Engine init ======
+  // =========================
+  // ===== Engine init ========
+  // =========================
   var BASE_FOV = 90;
   var BOOST_FOV = 100;
+
+  // ---- GLTF loader (SINGLE INSTANCE) ----
+  var gltfLoader = null;
+  var carGLTF = null;          // loaded gltf scene
+  var carGLTFReady = false;
+  var carGLTFLoading = false;
+  var carGLTFWaiters = [];     // callbacks waiting for load (null on fail)
+
+  function ensureGLTFLoader() {
+    if (gltfLoader) return;
+    if (!GLTF_CAR_URL) return;
+    if (typeof THREE === "undefined") return;
+    if (typeof THREE.GLTFLoader === "undefined") {
+      console.warn("GLTFLoader not found. Make sure you included: examples/js/loaders/GLTFLoader.js");
+      return;
+    }
+    gltfLoader = new THREE.GLTFLoader();
+  }
+
+  // ---- preloadCarGLTF (DEFINED ONCE) ----
+  function preloadCarGLTF() {
+    if (!GLTF_CAR_URL) return;
+    ensureGLTFLoader();
+    if (!gltfLoader) return;
+
+    if (carGLTFReady || carGLTFLoading) return;
+    carGLTFLoading = true;
+
+    gltfLoader.load(
+      GLTF_CAR_URL,
+      function (g) {
+        carGLTFLoading = false;
+        carGLTFReady = true;
+        carGLTF = (g && g.scene) ? g.scene : null;
+
+        // normalize
+        if (carGLTF) {
+          carGLTF.traverse(function (o) {
+            if (o && o.isMesh) {
+              o.castShadow = true;
+              o.receiveShadow = true;
+              if (o.material) o.material.needsUpdate = true;
+            }
+          });
+        }
+
+        var w = carGLTFWaiters.slice();
+        carGLTFWaiters.length = 0;
+        for (var i = 0; i < w.length; i++) w[i](carGLTF);
+      },
+      undefined,
+      function (err) {
+        console.warn("GLTF car load failed. Falling back to built-in car.", err);
+        carGLTFLoading = false;
+        carGLTFReady = false;
+        carGLTF = null;
+
+        var w2 = carGLTFWaiters.slice();
+        carGLTFWaiters.length = 0;
+        for (var j = 0; j < w2.length; j++) w2[j](null);
+      }
+    );
+  }
 
   function ensureEngine() {
     if (scene && renderer && mapGroup && cpGroup && camera) return;
@@ -357,7 +418,7 @@ var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€
     scene.add(new THREE.AmbientLight(0xffffff, 0.35));
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 0.55));
 
-    // Grab existing UI nodes (if present)
+    // Grab existing UI nodes
     foreEl = document.getElementById("fore");
     titleEl = document.getElementById("title");
     startEl = document.getElementById("start");
@@ -391,7 +452,7 @@ var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€
       document.head.appendChild(st);
     }
 
-    // Nitro UI style (bar exists always, but we will hide/show via updateNitroUI)
+    // Nitro UI style
     if (!document.getElementById("nitroStyle")) {
       var ns = document.createElement("style");
       ns.id = "nitroStyle";
@@ -421,6 +482,10 @@ var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€
 
     window.addEventListener("resize", onResize, false);
     window.addEventListener("orientationchange", onResize, false);
+
+    // Initialize loader once + preload once
+    ensureGLTFLoader();
+    preloadCarGLTF();
   }
 
   function onResize() {
@@ -430,7 +495,9 @@ var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€
     renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
-  // ====== Map build ======
+  // =========================
+  // ===== Map build ==========
+  // =========================
   function clearGroup(g) {
     if (!g) return;
     while (g.children.length) g.remove(g.children[0]);
@@ -468,10 +535,11 @@ var SIDE_SCRUB_TURN = 0.18;      // extra lateral damping while steering (0.10â€
 
       var deg = parseFloat(sp[1] || "0");
       if (isFinite(deg)) {
-// Editor deg assumed: 0Â° = +X (right), 90Â° = +Y (up)
-// Editor: 0Â°=+X, 90Â°=+Y (up). Game uses Y flipped via parseV2(x, -y).
-// Game forward is (sin(dir), cos(dir)), so dir must be Î¸ + 90Â°.
-spawnDir = deg * Math.PI / 180;
+        if (MIRROR_X) deg = 180 - deg;
+
+        // Editor: 0Â°=+X, 90Â°=+Y. Game forward is (sin(dir), cos(dir)).
+        // Correct conversion:
+        spawnDir = (deg + 90) * Math.PI / 180;
 
         hasSpawn = true;
       }
@@ -628,12 +696,48 @@ spawnDir = deg * Math.PI / 180;
 
     spawnX = start.mid.x + forward.x * 5;
     spawnY = start.mid.y + forward.y * 5;
-// Inverse of fwd = (sin(dir), cos(dir))
-spawnDir = Math.atan2(forward.x, forward.y);
+
+    // Inverse of fwd = (sin(dir), cos(dir))
+    spawnDir = Math.atan2(forward.x, forward.y);
   }
 
-  // ====== Cars + labels ======
-  function makeCar(hexColor) {
+  // =========================
+  // ===== Car models =========
+  // =========================
+  function attachSlipFX(root) {
+    if (!root) return;
+    if (root.getObjectByName && root.getObjectByName("slipfx")) return;
+
+    var slip = new THREE.Group();
+    slip.name = "slipfx";
+    slip.visible = false;
+
+    var geo = new THREE.PlaneGeometry(0.10, 6.0);
+    geo.rotateX(-Math.PI / 2);
+
+    function lineMesh(x) {
+      var mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false
+      });
+      mat.blending = THREE.AdditiveBlending;
+
+      var mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, -0.52, -3.8);
+      mesh.renderOrder = 9999;
+      return mesh;
+    }
+
+    slip.add(lineMesh(-0.35));
+    slip.add(lineMesh(0.35));
+
+    root.add(slip);
+  }
+
+  // ---- Built-in procedural F1 (has wheel indices 2/3 for steer animation) ----
+  function makeBuiltInCar(hexColor) {
     var car = new THREE.Object3D();
 
     var bodyMat = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.5, metalness: 0.12 });
@@ -655,45 +759,14 @@ spawnDir = Math.atan2(forward.x, forward.y);
       parent.add(mesh);
       return mesh;
     }
-
     function box(parent, w, h, l, mat, x, y, z, rx, ry, rz) {
       return addMesh(parent, new THREE.Mesh(new THREE.BoxGeometry(w, h, l), mat), x, y, z, rx, ry, rz);
     }
-
     function cyl(parent, rTop, rBot, h, seg, mat, x, y, z, rx, ry, rz) {
       return addMesh(parent, new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, seg), mat), x, y, z, rx, ry, rz);
     }
 
-    function sphere(parent, r, seg, mat, x, y, z) {
-      return addMesh(parent, new THREE.Mesh(new THREE.SphereGeometry(r, seg, seg), mat), x, y, z);
-    }
-
-    function torus(parent, r, tube, segR, segT, mat, x, y, z, rx, ry, rz) {
-      return addMesh(parent, new THREE.Mesh(new THREE.TorusGeometry(r, tube, segR, segT), mat), x, y, z, rx, ry, rz);
-    }
-
-    function strut(parent, ax, ay, az, bx, by, bz, radius, mat) {
-      var a = new THREE.Vector3(ax, ay, az);
-      var b = new THREE.Vector3(bx, by, bz);
-      var dir = b.clone().sub(a);
-      var len = dir.length();
-      if (len < 1e-6) return null;
-
-      var m = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, len, 10), mat);
-      m.castShadow = true;
-      m.receiveShadow = true;
-
-      var mid = a.clone().add(b).multiplyScalar(0.5);
-      m.position.copy(mid);
-
-      dir.normalize();
-      m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-
-      parent.add(m);
-      return m;
-    }
-
-    // (CHILD 0) Body
+    // body is child[0]
     var body = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.30, 2.85), bodyMat);
     body.castShadow = true;
     body.receiveShadow = true;
@@ -709,88 +782,23 @@ spawnDir = Math.atan2(forward.x, forward.y);
     box(body, 2.35, 0.06, 0.42, carbonMat, 0, -0.16, 2.18);
     box(body, 2.10, 0.05, 0.26, darkMat, 0, -0.08, 2.30);
 
-    box(body, 0.08, 0.26, 0.46, carbonMat, -1.14, -0.03, 2.18);
-    box(body, 0.08, 0.26, 0.46, carbonMat,  1.14, -0.03, 2.18);
-
-    box(body, 0.10, 0.18, 0.10, carbonMat, -0.24, -0.05, 2.05);
-    box(body, 0.10, 0.18, 0.10, carbonMat,  0.24, -0.05, 2.05);
-
-    box(body, 0.58, 0.22, 1.45, bodyMat, -0.82, -0.02, -0.15);
-    box(body, 0.58, 0.22, 1.45, bodyMat,  0.82, -0.02, -0.15);
-
-    box(body, 0.35, 0.12, 0.35, darkMat, -0.90, 0.04, 0.45);
-    box(body, 0.35, 0.12, 0.35, darkMat,  0.90, 0.04, 0.45);
-
-    box(body, 0.10, 0.14, 0.55, carbonMat, -0.65, -0.07, 0.55);
-    box(body, 0.10, 0.14, 0.55, carbonMat,  0.65, -0.07, 0.55);
-
     box(body, 0.55, 0.22, 1.25, bodyMat, 0, 0.12, -1.05);
     box(body, 0.06, 0.40, 0.95, carbonMat, 0, 0.30, -1.20);
-
-    cyl(body, 0.16, 0.16, 0.20, 12, carbonMat, 0, 0.34, -0.35, 0, 0, 0);
-    box(body, 0.28, 0.14, 0.22, darkMat, 0, 0.33, -0.35);
 
     box(body, 1.55, 0.09, 0.42, carbonMat, 0, 0.22, -1.92);
     box(body, 1.35, 0.06, 0.28, darkMat, 0, 0.30, -1.98);
 
-    box(body, 0.08, 0.48, 0.44, carbonMat, -0.74, 0.04, -1.92);
-    box(body, 0.08, 0.48, 0.44, carbonMat,  0.74, 0.04, -1.92);
+    // slipstream fx on body
+    attachSlipFX(body);
 
-    box(body, 0.08, 0.30, 0.08, carbonMat, -0.20, 0.05, -1.72);
-    box(body, 0.08, 0.30, 0.08, carbonMat,  0.20, 0.05, -1.72);
-
-    box(body, 0.92, 0.12, 0.55, darkMat, 0, -0.12, -1.82);
-
-    cyl(body, 0.06, 0.06, 0.25, 10, metalMat, 0, 0.15, -1.70, Math.PI / 2, 0, 0);
-
-    box(body, 0.10, 0.02, 2.40, whiteMat, 0, 0.16, 0.10);
-    box(body, 0.55, 0.02, 0.50, whiteMat, 0, 0.16, -1.25);
-    box(body, 0.58, 0.22, 1.45, bodyMat, -0.82, -0.02, -0.15);
-
-    // Slipstream FX (behind THIS car; used on the car you are drafting)
-    (function addSlipFX() {
-      var slip = new THREE.Group();
-      slip.name = "slipfx";
-      slip.visible = false;
-
-      var geo = new THREE.PlaneGeometry(0.10, 6.0);
-      geo.rotateX(-Math.PI / 2);
-
-      function lineMesh(x) {
-        var mat = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
-          transparent: true,
-          opacity: 0,
-          depthWrite: false
-        });
-        mat.blending = THREE.AdditiveBlending;
-
-        var mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(x, -0.52, -3.8);
-        mesh.renderOrder = 9999;
-        return mesh;
-      }
-
-      slip.add(lineMesh(-0.35));
-      slip.add(lineMesh(0.35));
-      body.add(slip);
-    })();
-
-    // (CHILD 1) Cabin
+    // cabin is child[1]
     var cabin = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.20, 0.90), glassMat);
     cabin.castShadow = true;
     cabin.receiveShadow = true;
     cabin.position.set(0, 0.78, 0.25);
     car.add(cabin);
 
-    torus(cabin, 0.28, 0.04, 10, 18, carbonMat, 0, 0.10, -0.06, Math.PI / 2, 0, 0);
-    box(cabin, 0.06, 0.16, 0.06, carbonMat, 0, 0.06, 0.18);
-    torus(cabin, 0.12, 0.03, 8, 14, darkMat, 0, -0.02, 0.22, 0.2, 0, 0);
-    sphere(cabin, 0.13, 12, whiteMat, 0, 0.08, 0.10);
-    box(cabin, 0.14, 0.05, 0.10, carbonMat, -0.45, 0.03, 0.45);
-    box(cabin, 0.14, 0.05, 0.10, carbonMat,  0.45, 0.03, 0.45);
-
-    // Wheels (top-level; indices matter)
+    // wheels are child[2..5]
     function wheelMesh(radius, thickness) {
       var g = new THREE.CylinderGeometry(radius, radius, thickness, 18);
       var m = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 1, metalness: 0.02 });
@@ -813,10 +821,6 @@ spawnDir = Math.atan2(forward.x, forward.y);
       disc.rotation.z = Math.PI / 2;
       w.add(disc);
 
-      var cal = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.18), darkMat);
-      cal.position.set(0, radius * 0.45, 0);
-      w.add(cal);
-
       return w;
     }
 
@@ -825,7 +829,6 @@ spawnDir = Math.atan2(forward.x, forward.y);
     var BL = { x: -1.08, y: 0.40, z: -1.32 };
     var BR = { x:  1.08, y: 0.40, z: -1.32 };
 
-    // (CHILD 2..5)
     var frontLeft = wheelMesh(0.36, 0.30);
     frontLeft.position.set(FL.x, FL.y, FL.z);
     car.add(frontLeft);
@@ -842,22 +845,63 @@ spawnDir = Math.atan2(forward.x, forward.y);
     backRight.position.set(BR.x, BR.y, BR.z);
     car.add(backRight);
 
-    function toBodyLocal(p) { return { x: p.x, y: p.y - 0.55, z: p.z }; }
-    var fl = toBodyLocal(FL), fr = toBodyLocal(FR), bl = toBodyLocal(BL), br = toBodyLocal(BR);
-
-    strut(body, -0.38, 0.02,  1.10, fl.x * 0.92, fl.y + 0.02, fl.z - 0.05, 0.03, carbonMat);
-    strut(body, -0.30, -0.08, 1.10, fl.x * 0.92, fl.y - 0.06, fl.z - 0.05, 0.03, carbonMat);
-    strut(body,  0.38, 0.02,  1.10, fr.x * 0.92, fr.y + 0.02, fr.z - 0.05, 0.03, carbonMat);
-    strut(body,  0.30, -0.08, 1.10, fr.x * 0.92, fr.y - 0.06, fr.z - 0.05, 0.03, carbonMat);
-
-    strut(body, -0.40, 0.00, -1.05, bl.x * 0.92, bl.y + 0.02, bl.z + 0.05, 0.03, carbonMat);
-    strut(body, -0.32, -0.10, -1.05, bl.x * 0.92, bl.y - 0.06, bl.z + 0.05, 0.03, carbonMat);
-    strut(body,  0.40, 0.00, -1.05, br.x * 0.92, br.y + 0.02, br.z + 0.05, 0.03, carbonMat);
-    strut(body,  0.32, -0.10, -1.05, br.x * 0.92, br.y - 0.06, br.z + 0.05, 0.03, carbonMat);
-
     return car;
   }
 
+  function tintModel(root, hexColor) {
+    if (!root) return;
+    var c = new THREE.Color(hexColor);
+    root.traverse(function (o) {
+      if (!o || !o.isMesh) return;
+      var m = o.material;
+      if (!m) return;
+
+      if (Array.isArray(m)) {
+        for (var i = 0; i < m.length; i++) {
+          if (m[i] && m[i].color) m[i].color.copy(c);
+        }
+      } else {
+        if (m.color) m.color.copy(c);
+      }
+    });
+  }
+
+  function createCarModel(hexColorInt, cb) {
+    ensureEngine();
+
+    // If no GLTF configured, return built-in immediately
+    if (!GLTF_CAR_URL) {
+      cb(makeBuiltInCar(hexColorInt));
+      return;
+    }
+
+    // If GLTF already loaded, clone and return
+    if (carGLTFReady && carGLTF) {
+      var clone = carGLTF.clone(true);
+      clone.scale.set(1, 1, 1);
+      tintModel(clone, hexColorInt);
+      attachSlipFX(clone);
+      cb(clone);
+      return;
+    }
+
+    // Otherwise: return built-in NOW (so game never blocks),
+    // then swap to GLTF when it finishes loading.
+    var placeholder = makeBuiltInCar(hexColorInt);
+    cb(placeholder);
+
+    // Queue swap
+    carGLTFWaiters.push(function (loaded) {
+      if (!loaded || !me || !me.model) return; // fail or no player anymore
+      // If placeholder was removed/replaced, don't force swap blindly.
+      // We'll only swap if the current model is still the placeholder we gave.
+      // (We mark placeholder.)
+    });
+  }
+
+  // =========================
+  // ===== Labels ============
+  // =========================
   function makeLabel(name) {
     var el = document.createElement("div");
     el.className = "pLabel";
@@ -876,15 +920,14 @@ spawnDir = Math.atan2(forward.x, forward.y);
     return { x: x, y: y, visible: visible };
   }
 
-  // ====== Slipstream helpers + visuals ======
+  // =========================
+  // ===== Slipstream =========
+  // =========================
   function getSlipFX(model) {
     if (!model) return null;
     if (model._slipfxCached !== undefined) return model._slipfxCached;
 
-    var body = model.children && model.children[0];
-    if (!body) { model._slipfxCached = null; return null; }
-
-    var fx = body.getObjectByName("slipfx");
+    var fx = model.getObjectByName ? model.getObjectByName("slipfx") : null;
     model._slipfxCached = fx || null;
     return model._slipfxCached;
   }
@@ -969,7 +1012,9 @@ spawnDir = Math.atan2(forward.x, forward.y);
     }
   }
 
-  // ====== Input ======
+  // =========================
+  // ===== Input =============
+  // =========================
   function setupInputOnce() {
     if (setupInputOnce._did) return;
     setupInputOnce._did = true;
@@ -1020,7 +1065,9 @@ spawnDir = Math.atan2(forward.x, forward.y);
     window.addEventListener("touchend", function () { left = right = up = down = false; }, { passive: true });
   }
 
-  // ====== Color picker ======
+  // =========================
+  // ===== Color picker =======
+  // =========================
   function hsvToHex(h, s, v) {
     var c = v * s;
     var x = c * (1 - Math.abs(((h / 60) % 2) - 1));
@@ -1080,7 +1127,9 @@ spawnDir = Math.atan2(forward.x, forward.y);
     pickerEl.addEventListener("touchend", function () { dragging = false; }, { passive: true });
   }
 
-  // ====== Menu + flow ======
+  // =========================
+  // ===== Menu + flow ========
+  // =========================
   function animateMenuIn() {
     if (titleEl) setTimeout(function () { titleEl.style.transform = "translate3d(0, 0, 0)"; }, 10);
     var items = document.getElementsByClassName("menuitem");
@@ -1125,7 +1174,9 @@ spawnDir = Math.atan2(forward.x, forward.y);
     mkButton("SOLO", 80, function () { soloFlow(); });
   }
 
-  // ====== Toolbar tools ======
+  // =========================
+  // ===== Toolbar tools ======
+  // =========================
   function setupToolbarOnce() {
     if (setupToolbarOnce._did) return;
     setupToolbarOnce._did = true;
@@ -1179,7 +1230,9 @@ spawnDir = Math.atan2(forward.x, forward.y);
     });
   }
 
-  // ====== Multiplayer room handling ======
+  // =========================
+  // ===== Multiplayer ========
+  // =========================
   function randomCode(len) {
     var s = "";
     var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -1207,7 +1260,7 @@ spawnDir = Math.atan2(forward.x, forward.y);
   }
 
   function connectToRoom(code, hostFlag) {
-      if (meKey) return;   // prevents multiple cars spawning
+    if (meKey) return; // prevents multiple cars spawning
     ensureEngine();
 
     detachRoomListeners();
@@ -1280,18 +1333,20 @@ spawnDir = Math.atan2(forward.x, forward.y);
     };
 
     var hex = parseInt(color.replace("#", "0x"), 16);
-    var model = makeCar(hex);
-    model.position.set(data.x, 0, data.y);
-    model.rotation.y = data.dir;
-    scene.add(model);
 
-    var label = makeLabel(nm);
+    createCarModel(hex, function (model) {
+      model.position.set(data.x, 0, data.y);
+      model.rotation.y = data.dir;
+      scene.add(model);
 
-    me = { key: meKey, ref: ref, data: data, model: model, label: label, isMe: true, lastSend: 0 };
-    players[meKey] = me;
+      var label = makeLabel(nm);
 
-    ref.onDisconnect().remove();
-    ref.set(data);
+      me = { key: meKey, ref: ref, data: data, model: model, label: label, isMe: true, lastSend: 0 };
+      players[meKey] = me;
+
+      ref.onDisconnect().remove();
+      ref.set(data);
+    });
   }
 
   function upsertPlayer(key, data) {
@@ -1307,14 +1362,16 @@ spawnDir = Math.atan2(forward.x, forward.y);
     var p = players[key];
     if (!p) {
       var hex = parseInt(((data.color || "#ff3030").replace("#", "0x")), 16);
-      var model = makeCar(hex);
-      model.position.set(data.x || 0, 0, data.y || 0);
-      model.rotation.y = data.dir || 0;
-      scene.add(model);
 
-      var label = makeLabel(data.name || "Player");
-      p = { key: key, ref: playersRef.child(key), data: data, model: model, label: label, isMe: false };
-      players[key] = p;
+      createCarModel(hex, function (model) {
+        model.position.set(data.x || 0, 0, data.y || 0);
+        model.rotation.y = data.dir || 0;
+        scene.add(model);
+
+        var label = makeLabel(data.name || "Player");
+        p = { key: key, ref: playersRef.child(key), data: data, model: model, label: label, isMe: false };
+        players[key] = p;
+      });
     } else {
       p.data = data;
       if (p.label && p.label.textContent !== (data.name || "Player")) p.label.textContent = data.name || "Player";
@@ -1420,17 +1477,19 @@ spawnDir = Math.atan2(forward.x, forward.y);
     };
 
     var hex = parseInt(color.replace("#", "0x"), 16);
-    var model = makeCar(hex);
-    model.position.set(data.x, 0, data.y);
-    model.rotation.y = data.dir;
-    scene.add(model);
 
-    var label = makeLabel(nm);
+    createCarModel(hex, function (model) {
+      model.position.set(data.x, 0, data.y);
+      model.rotation.y = data.dir;
+      scene.add(model);
 
-    me = { key: meKey, ref: null, data: data, model: model, label: label, isMe: true, lastSend: 0 };
-    players[meKey] = me;
+      var label = makeLabel(nm);
 
-    startGame();
+      me = { key: meKey, ref: null, data: data, model: model, label: label, isMe: true, lastSend: 0 };
+      players[meKey] = me;
+
+      startGame();
+    });
   }
 
   function startGame() {
@@ -1479,7 +1538,9 @@ spawnDir = Math.atan2(forward.x, forward.y);
     }, 1000);
   }
 
-  // ====== RECTANGLE / OBB helpers ======
+  // =========================
+  // ===== Collision helpers ==
+  // =========================
   function axesFromDir(dir) {
     var fwd = vec2(Math.sin(dir), Math.cos(dir));
     var right = vec2(Math.cos(dir), -Math.sin(dir));
@@ -1636,7 +1697,6 @@ spawnDir = Math.atan2(forward.x, forward.y);
     return { hit: true, mtv: bestAxis.clone().multiplyScalar(bestOverlap) };
   }
 
-  // ====== Player collisions (rectangle hitboxes) ======
   function collideWithPlayers() {
     if (!playerCollisionEnabled || !me) return;
 
@@ -1668,7 +1728,6 @@ spawnDir = Math.atan2(forward.x, forward.y);
       if (n.lengthSq() > 1e-9) n.normalize();
       if (v.dot(n) < 0) v = reflect2(v, n).multiplyScalar(BOUNCE);
 
-      // tiny nudge to other (feel)
       p.data.x += n.x * 0.06;
       p.data.y += n.y * 0.06;
       p.data.xv = (p.data.xv || 0) + n.x * 0.05;
@@ -1681,56 +1740,50 @@ spawnDir = Math.atan2(forward.x, forward.y);
     me.data.yv = v.y;
   }
 
-  // ====== WALL collisions (rectangle hitbox vs wall segments) ======
-function collideMeWithWallsRect() {
-  if (!me) return;
+  function collideMeWithWallsRect() {
+    if (!me) return;
 
-  var pWorld = vec2(me.data.x, me.data.y);
-  var vWorld = vec2(me.data.xv, me.data.yv);
+    var pWorld = vec2(me.data.x, me.data.y);
+    var vWorld = vec2(me.data.xv, me.data.yv);
 
-  var axes = axesFromDir(me.data.dir);
+    var axes = axesFromDir(me.data.dir);
 
-  for (var pass = 0; pass < 3; pass++) {
+    for (var pass = 0; pass < 3; pass++) {
+      for (var i = 0; i < wallSegs.length; i++) {
+        var w = wallSegs[i];
 
-    for (var i = 0; i < wallSegs.length; i++) {
-      var w = wallSegs[i];
+        var aL = worldToLocal(w.a, pWorld, axes);
+        var bL = worldToLocal(w.b, pWorld, axes);
 
-      var aL = worldToLocal(w.a, pWorld, axes);
-      var bL = worldToLocal(w.b, pWorld, axes);
+        var res = segRectDistanceLocal(aL, bL, CAR_HALF_WIDTH, CAR_HALF_LENGTH);
 
-      var res = segRectDistanceLocal(aL, bL, CAR_HALF_WIDTH, CAR_HALF_LENGTH);
+        if (res.dist < WALL_SIZE) {
+          var nL = res.n.clone();
+          if (nL.lengthSq() < 1e-9) continue;
+          nL.normalize();
 
-      if (res.dist < WALL_SIZE) {
+          var push = (WALL_SIZE - res.dist) + 0.08;
+          var pushWorld = localToWorld(nL.multiplyScalar(push), axes);
+          pWorld.add(pushWorld);
 
-        var nL = res.n.clone();
-        if (nL.lengthSq() < 1e-9) continue;
-        nL.normalize();
+          var nW = pushWorld.clone().normalize();
 
-        var push = (WALL_SIZE - res.dist) + 0.08;
-        var pushWorld = localToWorld(nL.multiplyScalar(push), axes);
-        pWorld.add(pushWorld);
-
-        var nW = pushWorld.clone().normalize();
-
-        // restore bounce physics
-        if (vWorld.dot(nW) < 0) {
-          vWorld = reflect2(vWorld, nW).multiplyScalar(BOUNCE);
+          if (vWorld.dot(nW) < 0) {
+            vWorld = reflect2(vWorld, nW).multiplyScalar(BOUNCE);
+          }
         }
       }
     }
+
+    me.data.x = pWorld.x;
+    me.data.y = pWorld.y;
+    me.data.xv = vWorld.x;
+    me.data.yv = vWorld.y;
   }
 
-  me.data.x = pWorld.x;
-  me.data.y = pWorld.y;
-  me.data.xv = vWorld.x;
-  me.data.yv = vWorld.y;
-}
-
-
-
-
-
-  // ====== Checkpoints ======
+  // =========================
+  // ===== Checkpoints ========
+  // =========================
   function handleCheckpoints() {
     if (!cpSegs.length || !me) return;
     if (cpSegs.length < 2) return;
@@ -1770,166 +1823,140 @@ function collideMeWithWallsRect() {
     }
   }
 
-  // ====== Physics + game loop ======
+  // =========================
+  // ===== Physics + loop =====
+  // =========================
   function updateMePhysics(warp, dtSec) {
     if (!me || !me.data || !me.model) return;
 
-    // Slipstream
+    // Slipstream compute
     var slip = computeSlipstreamForMe();
     slipTargetKey = slip.key;
     slipFactor = slip.factor;
 
-    // Steering (reverse behavior as requested)
+    // Steering (reverse behavior)
     if (!mobile) {
-      if (left) me.data.steer = Math.PI / 3.5;
-      if (right) me.data.steer = -Math.PI / 3.5;
+      if (left) me.data.steer = STEER_MAX;
+      if (right) me.data.steer = -STEER_MAX;
       if (!(left ^ right)) me.data.steer = 0;
     }
-    me.data.steer = clamp(me.data.steer, -Math.PI / 4, Math.PI / 4);  // 45Â°
-// --- Nitro state update (per frame) ---
-nitroActive = false;
+    me.data.steer = clamp(me.data.steer, -STEER_MAX, STEER_MAX);
 
-if (nitro && nitroArmed && !nitroLock && nitroFuel > 0) {
-  nitroActive = true;
-  nitroFuel -= NITRO_DRAIN * dtSec;
-
-  if (nitroFuel <= 0) {
-    nitroFuel = 0;
-    nitroLock = true;     // locked until Shift released (your keyup clears it)
-    nitroArmed = false;
+    // Nitro state
     nitroActive = false;
-  }
-} else {
-  // regen only when not actively boosting
-  nitroFuel = Math.min(NITRO_MAX, nitroFuel + NITRO_REGEN * dtSec);
-}
+    if (nitro && nitroArmed && !nitroLock && nitroFuel > 0) {
+      nitroActive = true;
+      nitroFuel -= NITRO_DRAIN * dtSec;
 
-// ===== Classic/original physics + drift (velocity lag) =====
-if (USE_CLASSIC_PHYSICS) {
+      if (nitroFuel <= 0) {
+        nitroFuel = 0;
+        nitroLock = true;
+        nitroArmed = false;
+        nitroActive = false;
+      }
+    } else {
+      nitroFuel = Math.min(NITRO_MAX, nitroFuel + NITRO_REGEN * dtSec);
+    }
 
-  // Use whatever your real nitro flag is.
-  // If you don't have "usingNitro" defined elsewhere, use nitroActive:
-  var usingNitro = (typeof nitroActive !== "undefined") ? nitroActive : false;
+    if (USE_CLASSIC_PHYSICS) {
+      var usingNitro = nitroActive;
 
- // Understeer at speed
-var sp0 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+      // understeer scaling with speed
+      var sp0 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+      var steerScale = 1 / (1 + sp0 * TURN_SPEED_FALLOFF);
 
-// Use your global TURN_SPEED_FALLOFF (already defined at top)
-var steerScale = 1 / (1 + sp0 * TURN_SPEED_FALLOFF);
+      // turn
+      me.data.dir += (me.data.steer / CLASSIC_TURN_DIV) * warp * steerScale;
+      me.data.dir = wrapAngle(me.data.dir);
 
-// Steering like original, but scaled by speed
-me.data.dir += (me.data.steer / CLASSIC_TURN_DIV) * warp * steerScale;
+      // throttle
+      var forwardOn = up;
+      var accel = SPEED;
 
+      if (usingNitro) accel *= NITRO_MULT;
+      if (slipFactor > 0.001) accel *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
 
-  // Throttle ONLY when pressing up (no auto-forward)
-  var forwardOn = up;
-  var accel = SPEED;
+      if (forwardOn) {
+        me.data.xv += Math.sin(me.data.dir) * accel * warp;
+        me.data.yv += Math.cos(me.data.dir) * accel * warp;
+      }
 
-  // Keep your nitro + slip accel behavior
-  if (usingNitro) accel *= NITRO_MULT;
-  if (slipFactor > 0.001) accel *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
+      if (down) {
+        me.data.xv -= Math.sin(me.data.dir) * accel * 2.3 * warp;
+        me.data.yv -= Math.cos(me.data.dir) * accel * 2.3 * warp;
+      }
 
-  // Forward accel
-  if (forwardOn) {
-    me.data.xv += Math.sin(me.data.dir) * accel * warp;
-    me.data.yv += Math.cos(me.data.dir) * accel * warp;
-  }
+      // drag
+      var dragPow = Math.pow(CLASSIC_DRAG, warp);
+      me.data.xv *= dragPow;
+      me.data.yv *= dragPow;
 
-  // Optional reverse
-  if (down) {
-    me.data.xv -= Math.sin(me.data.dir) * accel * 2.3 * warp;
-    me.data.yv -= Math.cos(me.data.dir) * accel * 2.3 * warp;
-  }
+      // drift model: velocity direction lags heading
+      var vx = me.data.xv, vy = me.data.yv;
+      var sp = Math.sqrt(vx * vx + vy * vy);
 
-  // Drag like original
-  var dragPow = Math.pow(CLASSIC_DRAG, warp);
-  me.data.xv *= dragPow;
-  me.data.yv *= dragPow;
+      if (sp > 1e-6) {
+        var velAng = Math.atan2(vx, vy);
+        var fwdAng = me.data.dir;
+        var diff = wrapAngle(fwdAng - velAng);
 
-  // === DRIFT MODEL: velocity direction lags behind heading ===
-  var vx = me.data.xv, vy = me.data.yv;
-  var sp = Math.sqrt(vx * vx + vy * vy);
+        var grip = DRIFT_ALIGN_BASE / (1 + sp * DRIFT_ALIGN_SPEED_FALLOFF);
+        if (Math.abs(me.data.steer) > 0.001) grip *= DRIFT_ALIGN_TURN_MULT;
+        if (usingNitro) grip *= DRIFT_ALIGN_NITRO_MULT;
 
-  if (sp > 1e-6) {
-    // angles in your coordinate system (x=sin, y=cos)
-    var velAng = Math.atan2(vx, vy);
-    var fwdAng = me.data.dir;
-    var diff = wrapAngle(fwdAng - velAng);
+        var align = clamp(grip * dtSec * 60, 0, 1);
+        velAng += diff * align;
 
-    // grip (lower => more drift)
-    var grip = DRIFT_ALIGN_BASE / (1 + sp * DRIFT_ALIGN_SPEED_FALLOFF);
+        vx = Math.sin(velAng) * sp;
+        vy = Math.cos(velAng) * sp;
 
-    if (Math.abs(me.data.steer) > 0.001) grip *= DRIFT_ALIGN_TURN_MULT;
-    if (usingNitro) grip *= DRIFT_ALIGN_NITRO_MULT;
+        var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
+        var side = vec2(fwd.y, -fwd.x);
 
-    // amount to align this frame
-    var align = clamp(grip * dtSec * 60, 0, 1);
+        var vf = vx * fwd.x + vy * fwd.y;
+        var vl = vx * side.x + vy * side.y;
 
-    // rotate velocity toward heading, but only partially => "pre-turn" needed
-    velAng += diff * align;
+        var scrub = SIDE_SCRUB;
+        if (Math.abs(me.data.steer) > 0.001) scrub *= SIDE_SCRUB_TURN_MULT;
+        if (usingNitro) scrub *= SIDE_SCRUB_NITRO_MULT;
 
-    // rebuild velocity with same speed
-    vx = Math.sin(velAng) * sp;
-    vy = Math.cos(velAng) * sp;
+        vl *= Math.pow(1 - scrub, warp);
 
-    // small sideways scrub (keeps it from drifting forever)
-   var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
-var side = vec2(fwd.y, -fwd.x);
-   
-   var vf = vx * fwd.x + vy * fwd.y;
-var vl = vx * side.x + vy * side.y;
+        vx = fwd.x * vf + side.x * vl;
+        vy = fwd.y * vf + side.y * vl;
 
-    var scrub = SIDE_SCRUB;
-    if (Math.abs(me.data.steer) > 0.001) scrub *= SIDE_SCRUB_TURN_MULT;
-    if (usingNitro) scrub *= SIDE_SCRUB_NITRO_MULT;
+        me.data.xv = vx;
+        me.data.yv = vy;
+      }
 
-vl *= Math.pow(1 - scrub, warp);
-    
-   vx = fwd.x * vf + side.x * vl;
-vy = fwd.y * vf + side.y * vl;
+      // speed cap
+      var cap = CLASSIC_MAX_SPEED;
+      if (usingNitro) cap *= 1.6;
+      if (slipFactor > 0.001) cap *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
 
-    me.data.xv = vx;
-    me.data.yv = vy;
-  }
+      var sp2 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+      if (sp2 > cap && sp2 > 1e-9) {
+        var sc = cap / sp2;
+        me.data.xv *= sc;
+        me.data.yv *= sc;
+      }
+    }
 
-  // Optional speed cap
-  var cap = CLASSIC_MAX_SPEED;
-  if (usingNitro) cap *= 1.6;
-  if (slipFactor > 0.001) cap *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
+    // substeps for collision stability
+    var steps = Math.ceil(Math.max(Math.abs(me.data.xv), Math.abs(me.data.yv)) * 6);
+    steps = Math.max(1, steps);
 
-  var sp2 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-  if (sp2 > cap && sp2 > 1e-9) {
-    var sc = cap / sp2;
-    me.data.xv *= sc;
-    me.data.yv *= sc;
-  }
-}
+    for (var s = 0; s < steps; s++) {
+      me.data.x += (me.data.xv * warp) / steps;
+      me.data.y += (me.data.yv * warp) / steps;
 
+      collideMeWithWallsRect();
+      collideWithPlayers();
+    }
 
+    handleCheckpoints();
 
-
-   
-
-
-
-
-
-
-
- var steps = Math.ceil(Math.max(Math.abs(me.data.xv), Math.abs(me.data.yv)) * 6);
-steps = Math.max(1, steps);
-
-for (var s = 0; s < steps; s++) {
-  me.data.x += (me.data.xv * warp) / steps;
-  me.data.y += (me.data.yv * warp) / steps;
-
-  collideMeWithWallsRect();
-  collideWithPlayers();
-}
-
-handleCheckpoints();
-
-
+    // out of bounds
     if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
       me.data.x = spawnX;
       me.data.y = spawnY;
@@ -1942,13 +1969,16 @@ handleCheckpoints();
       nitroActive = false;
     }
 
+    // apply to model
     me.model.position.x = me.data.x;
     me.model.position.z = me.data.y;
     me.model.rotation.y = me.data.dir;
 
-    // Front wheel steer
-    if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
-    if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
+    // wheel steer for built-in model only (children[2] & [3] are front wheels)
+    if (me.model.children && me.model.children.length >= 4) {
+      if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
+      if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
+    }
   }
 
   function updateCamera(warp) {
@@ -2029,14 +2059,13 @@ handleCheckpoints();
     me.ref.set(me.data);
   }
 
-  // ====== Nitro UI ======
+  // ===== Nitro UI =====
   function updateNitroUI() {
     var barEl = document.getElementById("nitrobar");
     var fillEl = document.getElementById("nitrofill");
     var lblEl = document.getElementById("nitrolabel");
     if (!barEl || !fillEl || !lblEl) return;
 
-    // Only visible while in game
     if (gameStarted) {
       barEl.style.display = "block";
       lblEl.style.display = "block";
@@ -2051,7 +2080,7 @@ handleCheckpoints();
     fillEl.style.width = ((nitroFuel / NITRO_MAX) * 100) + "%";
   }
 
-  // ====== Main loop ======
+  // ===== Main loop =====
   var lastTime = 0;
 
   function renderLoop(ts) {
@@ -2089,13 +2118,15 @@ handleCheckpoints();
 
     updateLabels();
     renderer.render(scene, camera);
-    MODS();
   }
 
-  // ====== Init ======
+  // =========================
+  // ===== Init ===============
+  // =========================
   function init() {
     ensureEngine();
 
+    // allow UI clicks while in menu
     if (foreEl) foreEl.style.pointerEvents = "auto";
     if (foreEl && foreEl.style.display === "none") foreEl.style.display = "";
 
@@ -2117,7 +2148,7 @@ handleCheckpoints();
     init();
   }
 
-  // ====== Compatibility with your existing HTML inline onclick handlers ======
+  // ===== Compatibility with your HTML inline onclick handlers =====
   window.menu2 = showModeMenu;
   window.host = hostFlow;
   window.joinGame = joinFlow;
@@ -2130,4 +2161,5 @@ handleCheckpoints();
       if (me && me.ref) me.ref.remove();
     } catch (e) {}
   });
+
 })();
