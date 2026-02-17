@@ -940,7 +940,7 @@ spawnDir = wrapAngle(spawnDir);
 
     // clone raw gltf
     var raw = carGLTF.clone(true);
-   raw.traverse(function (o) {
+  raw.traverse(function (o) {
   if (!o || !o.isMesh) return;
 
   o.castShadow = false;
@@ -948,20 +948,27 @@ spawnDir = wrapAngle(spawnDir);
 
   if (!o.material) return;
 
-  function brighten(m) {
-    if (!m) return;
-    if (m.emissive !== undefined) {
-      m.emissive.set(0xffffff);
-      m.emissiveIntensity = 0.7;
-    }
+  function convert(mat) {
+    if (!mat) return;
+
+    o.material = new THREE.MeshBasicMaterial({
+      map: mat.map || null,
+      color: 0xffffff
+    });
   }
 
   if (Array.isArray(o.material)) {
-    o.material.forEach(brighten);
+    o.material = o.material.map(function (m) {
+      return new THREE.MeshBasicMaterial({
+        map: m.map || null,
+        color: 0xffffff
+      });
+    });
   } else {
-    brighten(o.material);
+    convert(o.material);
   }
 });
+
 
 
     // scale
