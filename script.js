@@ -79,7 +79,7 @@
 var GLTF_CAR_URL = "scene.gltf";
 var GLTF_CAR_SCALE = 0.45;
 var GLTF_CAR_ROT_Y = Math.PI;
-var GLTF_CAR_Y_OFFSET = 1.75;
+var GLTF_CAR_Y_OFFSET = 3.75;
   // --- GLTF fit controls (NEW) ---
   // Auto-fit hitbox to the GLTF model's bounding box (XZ). Stored per-player.
   var GLTF_AUTO_FIT_HITBOX = true;
@@ -95,14 +95,14 @@ var GLTF_TARGET_LENGTH = (2 * CAR_HALF_LENGTH) * 0.75;
   // If auto-scaling, match width as a secondary clamp.
   var GLTF_TARGET_WIDTH = (2 * CAR_HALF_WIDTH);
   // If not auto-scaling, you can force a scale here:
-var GLTF_MANUAL_SCALE = 1.44;
+var GLTF_MANUAL_SCALE = 1.67;
 
   // Auto-center GLTF pivot to its bbox center (recommended for stable rotation/collision feel).
   var GLTF_AUTO_CENTER = true;
 
   // If your GLB faces the wrong way, adjust yaw visually without changing physics:
   // 0 = assumes model faces +Z when rotation.y = 0
-var GLTF_YAW_OFFSET = Math.PI / 2;
+var GLTF_YAW_OFFSET = 0;
 
   // If tinting breaks your textured model, set false.
   var GLTF_TINT_ENABLED = true;
@@ -2191,35 +2191,33 @@ if (carGLTFReady && carGLTF) {
     }
   }
 
-  function updateCamera(warp) {
-    if (!me || !me.model) return;
+ function updateCamera(warp) {
+  if (!me || !me.model) return;
 
-    var targetFov = nitroActive ? BOOST_FOV : BASE_FOV;
-    camera.fov = camera.fov * 0.88 + targetFov * 0.12;
-    camera.updateProjectionMatrix();
+  var targetFov = nitroActive ? BOOST_FOV : BASE_FOV;
+  camera.fov = camera.fov * 0.88 + targetFov * 0.12;
+  camera.updateProjectionMatrix();
 
-    // use physics dir (not model rotation) so GLTF yaw offset never breaks camera
-var yawOff = (me.model.userData && me.model.userData.yawOffset)
-  ? me.model.userData.yawOffset
-  : 0;
+  // IMPORTANT: camera follows PHYSICS dir only (no yawOffset)
+  var d = me.data.dir;
 
-var d = me.data.dir + yawOff;
+  // keep your original math, just with d = me.data.dir
+  var target = new THREE.Vector3(
+    me.model.position.x + Math.sin(-d) * 5,
+    CAM_HEIGHT,
+    me.model.position.z + -Math.cos(-d) * 5
+  );
 
-    var target = new THREE.Vector3(
-      me.model.position.x + Math.sin(-d) * 5,
-      CAM_HEIGHT,
-      me.model.position.z + -Math.cos(-d) * 5
-    );
+  var lagPow = Math.pow(CAMERA_LAG, warp);
+  camera.position.set(
+    camera.position.x * lagPow + target.x * (1 - lagPow),
+    CAM_HEIGHT,
+    camera.position.z * lagPow + target.z * (1 - lagPow)
+  );
 
-    var lagPow = Math.pow(CAMERA_LAG, warp);
-    camera.position.set(
-      camera.position.x * lagPow + target.x * (1 - lagPow),
-      CAM_HEIGHT,
-      camera.position.z * lagPow + target.z * (1 - lagPow)
-    );
+  camera.lookAt(me.model.position);
+}
 
-    camera.lookAt(me.model.position);
-  }
 
   function updateRemoteVisuals(warp) {
     for (var k in players) {
