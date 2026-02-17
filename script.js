@@ -993,7 +993,7 @@ spawnDir = wrapAngle(spawnDir);
       scale = clamp(scale, minS, maxS);
     }
 
-    raw.scale.set(scale, scale, scale);
+raw.scale.set(scale, scale, scale * 0.65);
     raw.updateMatrixWorld(true);
 
     // optional center to bbox
