@@ -1,6 +1,6 @@
 // CarGame - script.js (single file, no dependencies beyond three.js + firebase)
 // - Optional GLTF car (set GLTF_CAR_URL). Falls back to built-in F1.
-// - Rectangular hitbox collisions (walls + cars)
+// - Rectangular hitbox collisions (walls + cars)  ✅ now auto-fit for GLTF
 // - Reverse steering behavior (left/right as specified)
 // - Nitro lockout (must release Shift to re-arm after empty)
 // - Nitro bar visible only in game
@@ -64,6 +64,7 @@
   var SIDE_SCRUB_NITRO_MULT = 0.75;
 
   // ===== Car hitbox (rectangle) =====
+  // Built-in fallback dimensions. GLTF can auto-fit and override per player.
   var CAR_HALF_WIDTH = 1.08;
   var CAR_HALF_LENGTH = 2.25;
 
@@ -75,7 +76,34 @@
   // =========================
   // Set this to your car model URL (relative or absolute). Example:
   // var GLTF_CAR_URL = "./models/f1_car.glb";
-var GLTF_CAR_URL = "./models/car.glb";
+  var GLTF_CAR_URL = "./models/car.glb";
+
+  // --- GLTF fit controls (NEW) ---
+  // Auto-fit hitbox to the GLTF model's bounding box (XZ). Stored per-player.
+  var GLTF_AUTO_FIT_HITBOX = true;
+  // Extra padding added to half-extents (world units). Lower = tighter.
+  var GLTF_HITBOX_PADDING = 0.02;
+  // Multiply fitted half-extents. 1.0 = exact bbox; <1 tighter; >1 looser.
+  var GLTF_HITBOX_SCALE = 1.0;
+
+  // Auto-scale GLTF to feel like your built-in car size (recommended).
+  var GLTF_AUTO_SCALE = true;
+  // If auto-scaling, match the built-in car length (2*CAR_HALF_LENGTH) primarily.
+  var GLTF_TARGET_LENGTH = (2 * CAR_HALF_LENGTH);
+  // If auto-scaling, match width as a secondary clamp.
+  var GLTF_TARGET_WIDTH = (2 * CAR_HALF_WIDTH);
+  // If not auto-scaling, you can force a scale here:
+  var GLTF_MANUAL_SCALE = 1.0;
+
+  // Auto-center GLTF pivot to its bbox center (recommended for stable rotation/collision feel).
+  var GLTF_AUTO_CENTER = true;
+
+  // If your GLB faces the wrong way, adjust yaw visually without changing physics:
+  // 0 = assumes model faces +Z when rotation.y = 0
+  var GLTF_YAW_OFFSET = 0; // radians; e.g. Math.PI/2
+
+  // If tinting breaks your textured model, set false.
+  var GLTF_TINT_ENABLED = true;
 
   // =========================
   // ===== Nitro input/state ==
@@ -144,7 +172,8 @@ var GLTF_CAR_URL = "./models/car.glb";
   var playersRef = null;
   var startRef = null;
 
-  var players = {};   // key -> {key, data, model, label, ref, isMe}
+  // players[k] => {key, data, model, label, ref, isMe, halfW, halfL, lastSend}
+  var players = {};
   var meKey = null;
   var me = null;
 
@@ -298,23 +327,22 @@ var GLTF_CAR_URL = "./models/car.glb";
 
   // ---- GLTF loader (SINGLE INSTANCE) ----
   var gltfLoader = null;
-  var carGLTF = null;          // loaded gltf scene
+  var carGLTF = null;          // loaded gltf scene (raw)
   var carGLTFReady = false;
   var carGLTFLoading = false;
-  var carGLTFWaiters = [];     // callbacks waiting for load (null on fail)
+  var carGLTFWaiters = [];     // callbacks waiting for load (scene or null on fail)
 
   function ensureGLTFLoader() {
     if (gltfLoader) return;
     if (!GLTF_CAR_URL) return;
     if (typeof THREE === "undefined") return;
     if (typeof THREE.GLTFLoader === "undefined") {
-      console.warn("GLTFLoader not found. Make sure you included: examples/js/loaders/GLTFLoader.js");
+      console.warn("GLTFLoader not found. Include THREE examples GLTFLoader.js or it will use the built-in car.");
       return;
     }
     gltfLoader = new THREE.GLTFLoader();
   }
 
-  // ---- preloadCarGLTF (DEFINED ONCE) ----
   function preloadCarGLTF() {
     if (!GLTF_CAR_URL) return;
     ensureGLTFLoader();
@@ -330,7 +358,6 @@ var GLTF_CAR_URL = "./models/car.glb";
         carGLTFReady = true;
         carGLTF = (g && g.scene) ? g.scene : null;
 
-        // normalize
         if (carGLTF) {
           carGLTF.traverse(function (o) {
             if (o && o.isMesh) {
@@ -739,13 +766,17 @@ var GLTF_CAR_URL = "./models/car.glb";
   // ---- Built-in procedural F1 (has wheel indices 2/3 for steer animation) ----
   function makeBuiltInCar(hexColor) {
     var car = new THREE.Object3D();
+    car.userData.isBuiltIn = true;
+    car.userData.isGLTF = false;
+    car.userData.yawOffset = 0;
+    car.userData.halfW = CAR_HALF_WIDTH;
+    car.userData.halfL = CAR_HALF_LENGTH;
 
     var bodyMat = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.5, metalness: 0.12 });
     var carbonMat = new THREE.MeshStandardMaterial({ color: 0x0f0f10, roughness: 0.9, metalness: 0.05 });
     var darkMat = new THREE.MeshStandardMaterial({ color: 0x171717, roughness: 0.85, metalness: 0.05 });
     var metalMat = new THREE.MeshStandardMaterial({ color: 0x6b6b6b, roughness: 0.45, metalness: 0.5 });
     var glassMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.25, metalness: 0.05, transparent: true, opacity: 0.9 });
-    var whiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.02 });
 
     function addMesh(parent, mesh, x, y, z, rx, ry, rz) {
       if (x != null) mesh.position.x = x;
@@ -849,54 +880,202 @@ var GLTF_CAR_URL = "./models/car.glb";
   }
 
   function tintModel(root, hexColor) {
-    if (!root) return;
+    if (!root || !GLTF_TINT_ENABLED) return;
     var c = new THREE.Color(hexColor);
     root.traverse(function (o) {
       if (!o || !o.isMesh) return;
       var m = o.material;
       if (!m) return;
 
+      // If material has a map, tinting often looks bad. Keep map look by skipping color override.
+      // If you want full tint always, delete the "if (m.map)" checks.
       if (Array.isArray(m)) {
         for (var i = 0; i < m.length; i++) {
-          if (m[i] && m[i].color) m[i].color.copy(c);
+          if (!m[i]) continue;
+          if (m[i].map) continue;
+          if (m[i].color) m[i].color.copy(c);
         }
       } else {
+        if (m.map) return;
         if (m.color) m.color.copy(c);
       }
     });
   }
 
-  function createCarModel(hexColorInt, cb) {
+  // --- GLTF bbox sizing helpers (NEW) ---
+  function getBBoxSizeXZ(obj) {
+    // assumes obj already has desired scale applied
+    var savedPos = obj.position.clone();
+    var savedRot = obj.rotation.clone();
+
+    obj.position.set(0, 0, 0);
+    obj.rotation.set(0, 0, 0);
+    obj.updateMatrixWorld(true);
+
+    var box = new THREE.Box3().setFromObject(obj);
+    var size = new THREE.Vector3();
+    box.getSize(size);
+
+    obj.position.copy(savedPos);
+    obj.rotation.copy(savedRot);
+    obj.updateMatrixWorld(true);
+
+    return { size: size, box: box };
+  }
+
+  function buildGLTFCarInstance(hexColorInt) {
+    if (!carGLTFReady || !carGLTF) return null;
+
+    // clone raw gltf
+    var raw = carGLTF.clone(true);
+    raw.traverse(function (o) {
+      if (o && o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+        if (o.material) o.material.needsUpdate = true;
+      }
+    });
+
+    // scale
+    var scale = GLTF_MANUAL_SCALE;
+    if (GLTF_AUTO_SCALE) {
+      // measure at unit scale
+      raw.scale.set(1, 1, 1);
+      raw.updateMatrixWorld(true);
+      var m0 = getBBoxSizeXZ(raw).size;
+
+      var len = Math.max(1e-6, m0.z);
+      var wid = Math.max(1e-6, m0.x);
+
+      // primary: match length, clamp a bit using width to prevent absurd results
+      var sLen = GLTF_TARGET_LENGTH / len;
+      var sWid = GLTF_TARGET_WIDTH / wid;
+
+      // choose length match, but keep within a reasonable range of width match
+      scale = sLen;
+      var minS = sWid * 0.55;
+      var maxS = sWid * 1.80;
+      scale = clamp(scale, minS, maxS);
+    }
+
+    raw.scale.set(scale, scale, scale);
+    raw.updateMatrixWorld(true);
+
+    // optional center to bbox
+    var wrapper = new THREE.Group();
+    wrapper.userData.isBuiltIn = false;
+    wrapper.userData.isGLTF = true;
+    wrapper.userData.yawOffset = GLTF_YAW_OFFSET;
+
+    if (GLTF_AUTO_CENTER) {
+      var bbox = new THREE.Box3().setFromObject(raw);
+      var center = new THREE.Vector3();
+      bbox.getCenter(center);
+      // move raw so its bbox center sits at wrapper origin
+      raw.position.sub(center);
+      raw.updateMatrixWorld(true);
+    }
+
+    // fit hitbox from raw only (NO slipfx included)
+    var halfW = CAR_HALF_WIDTH;
+    var halfL = CAR_HALF_LENGTH;
+
+    if (GLTF_AUTO_FIT_HITBOX) {
+      var s = getBBoxSizeXZ(raw).size;
+      halfW = (s.x * 0.5) * GLTF_HITBOX_SCALE + GLTF_HITBOX_PADDING;
+      halfL = (s.z * 0.5) * GLTF_HITBOX_SCALE + GLTF_HITBOX_PADDING;
+
+      // keep sane minimums
+      halfW = Math.max(0.25, halfW);
+      halfL = Math.max(0.35, halfL);
+    }
+
+    wrapper.userData.halfW = halfW;
+    wrapper.userData.halfL = halfL;
+
+    // tint (optional)
+    tintModel(raw, hexColorInt);
+
+    wrapper.add(raw);
+
+    // slip fx on wrapper so it follows car
+    attachSlipFX(wrapper);
+
+    return wrapper;
+  }
+
+  function syncPlayerHitboxFromModel(p) {
+    if (!p || !p.model) return;
+    var hw = (p.model.userData && p.model.userData.halfW) ? p.model.userData.halfW : CAR_HALF_WIDTH;
+    var hl = (p.model.userData && p.model.userData.halfL) ? p.model.userData.halfL : CAR_HALF_LENGTH;
+    p.halfW = hw;
+    p.halfL = hl;
+  }
+
+  function swapPlayerModelToGLTF(playerKey) {
+    if (!carGLTFReady || !carGLTF) return;
+    var p = players[playerKey];
+    if (!p || !p.model) return;
+
+    // already gltf
+    if (p.model.userData && p.model.userData.isGLTF) return;
+
+    // preserve transform
+    var pos = p.model.position.clone();
+    var rotY = p.model.rotation.y;
+
+    // color -> hex
+    var col = (p.data && p.data.color) ? p.data.color : "#ff3030";
+    var hex = parseInt(col.replace("#", "0x"), 16);
+
+    var newModel = buildGLTFCarInstance(hex);
+    if (!newModel) return;
+
+    newModel.position.copy(pos);
+    newModel.rotation.y = rotY; // already includes yawOffset in rotY if we were applying it
+    scene.add(newModel);
+
+    scene.remove(p.model);
+    p.model = newModel;
+
+    syncPlayerHitboxFromModel(p);
+  }
+
+  // createCarModel now takes playerKey so swap-in can update the correct player (NEW)
+  function createCarModel(hexColorInt, playerKey, cb) {
     ensureEngine();
 
     // If no GLTF configured, return built-in immediately
     if (!GLTF_CAR_URL) {
-      cb(makeBuiltInCar(hexColorInt));
+      var built = makeBuiltInCar(hexColorInt);
+      built.userData.playerKey = playerKey;
+      cb(built);
       return;
     }
 
-    // If GLTF already loaded, clone and return
+    // If GLTF already loaded, use it immediately
     if (carGLTFReady && carGLTF) {
-      var clone = carGLTF.clone(true);
-      clone.scale.set(1, 1, 1);
-      tintModel(clone, hexColorInt);
-      attachSlipFX(clone);
-      cb(clone);
+      var gl = buildGLTFCarInstance(hexColorInt) || makeBuiltInCar(hexColorInt);
+      gl.userData.playerKey = playerKey;
+      cb(gl);
       return;
     }
 
-    // Otherwise: return built-in NOW (so game never blocks),
+    // Otherwise: return built-in NOW (game never blocks),
     // then swap to GLTF when it finishes loading.
     var placeholder = makeBuiltInCar(hexColorInt);
+    placeholder.userData.playerKey = playerKey;
+    placeholder.userData.isPlaceholder = true;
     cb(placeholder);
 
-    // Queue swap
+    // Queue swap after GLTF loads
     carGLTFWaiters.push(function (loaded) {
-      if (!loaded || !me || !me.model) return; // fail or no player anymore
-      // If placeholder was removed/replaced, don't force swap blindly.
-      // We'll only swap if the current model is still the placeholder we gave.
-      // (We mark placeholder.)
+      if (!loaded) return;
+      // if player still exists, swap
+      if (players[playerKey]) swapPlayerModelToGLTF(playerKey);
     });
+
+    preloadCarGLTF();
   }
 
   // =========================
@@ -1334,15 +1513,19 @@ var GLTF_CAR_URL = "./models/car.glb";
 
     var hex = parseInt(color.replace("#", "0x"), 16);
 
-    createCarModel(hex, function (model) {
+    createCarModel(hex, meKey, function (model) {
       model.position.set(data.x, 0, data.y);
-      model.rotation.y = data.dir;
+      // apply visual yaw offset without changing physics
+      var yawOff = (model.userData && model.userData.yawOffset) ? model.userData.yawOffset : 0;
+      model.rotation.y = data.dir + yawOff;
       scene.add(model);
 
       var label = makeLabel(nm);
 
-      me = { key: meKey, ref: ref, data: data, model: model, label: label, isMe: true, lastSend: 0 };
+      me = { key: meKey, ref: ref, data: data, model: model, label: label, isMe: true, lastSend: 0, halfW: CAR_HALF_WIDTH, halfL: CAR_HALF_LENGTH };
       players[meKey] = me;
+
+      syncPlayerHitboxFromModel(me);
 
       ref.onDisconnect().remove();
       ref.set(data);
@@ -1363,14 +1546,17 @@ var GLTF_CAR_URL = "./models/car.glb";
     if (!p) {
       var hex = parseInt(((data.color || "#ff3030").replace("#", "0x")), 16);
 
-      createCarModel(hex, function (model) {
+      createCarModel(hex, key, function (model) {
         model.position.set(data.x || 0, 0, data.y || 0);
-        model.rotation.y = data.dir || 0;
+        var yawOff = (model.userData && model.userData.yawOffset) ? model.userData.yawOffset : 0;
+        model.rotation.y = (data.dir || 0) + yawOff;
         scene.add(model);
 
         var label = makeLabel(data.name || "Player");
-        p = { key: key, ref: playersRef.child(key), data: data, model: model, label: label, isMe: false };
+        p = { key: key, ref: playersRef.child(key), data: data, model: model, label: label, isMe: false, halfW: CAR_HALF_WIDTH, halfL: CAR_HALF_LENGTH };
         players[key] = p;
+
+        syncPlayerHitboxFromModel(p);
       });
     } else {
       p.data = data;
@@ -1478,15 +1664,18 @@ var GLTF_CAR_URL = "./models/car.glb";
 
     var hex = parseInt(color.replace("#", "0x"), 16);
 
-    createCarModel(hex, function (model) {
+    createCarModel(hex, meKey, function (model) {
       model.position.set(data.x, 0, data.y);
-      model.rotation.y = data.dir;
+      var yawOff = (model.userData && model.userData.yawOffset) ? model.userData.yawOffset : 0;
+      model.rotation.y = data.dir + yawOff;
       scene.add(model);
 
       var label = makeLabel(nm);
 
-      me = { key: meKey, ref: null, data: data, model: model, label: label, isMe: true, lastSend: 0 };
+      me = { key: meKey, ref: null, data: data, model: model, label: label, isMe: true, lastSend: 0, halfW: CAR_HALF_WIDTH, halfL: CAR_HALF_LENGTH };
       players[meKey] = me;
+
+      syncPlayerHitboxFromModel(me);
 
       startGame();
     });
@@ -1702,8 +1891,8 @@ var GLTF_CAR_URL = "./models/car.glb";
 
     var aCenter = vec2(me.data.x, me.data.y);
     var aDir = me.data.dir;
-    var aHx = CAR_HALF_WIDTH;
-    var aHy = CAR_HALF_LENGTH;
+    var aHx = (me.halfW != null) ? me.halfW : CAR_HALF_WIDTH;
+    var aHy = (me.halfL != null) ? me.halfL : CAR_HALF_LENGTH;
 
     var v = vec2(me.data.xv, me.data.yv);
 
@@ -1716,8 +1905,8 @@ var GLTF_CAR_URL = "./models/car.glb";
 
       var bCenter = vec2(p.data.x || 0, p.data.y || 0);
       var bDir = p.data.dir || 0;
-      var bHx = CAR_HALF_WIDTH;
-      var bHy = CAR_HALF_LENGTH;
+      var bHx = (p.halfW != null) ? p.halfW : CAR_HALF_WIDTH;
+      var bHy = (p.halfL != null) ? p.halfL : CAR_HALF_LENGTH;
 
       var res = obbOverlapMTV(aCenter, aDir, aHx, aHy, bCenter, bDir, bHx, bHy);
       if (!res.hit) continue;
@@ -1743,6 +1932,9 @@ var GLTF_CAR_URL = "./models/car.glb";
   function collideMeWithWallsRect() {
     if (!me) return;
 
+    var hx = (me.halfW != null) ? me.halfW : CAR_HALF_WIDTH;
+    var hy = (me.halfL != null) ? me.halfL : CAR_HALF_LENGTH;
+
     var pWorld = vec2(me.data.x, me.data.y);
     var vWorld = vec2(me.data.xv, me.data.yv);
 
@@ -1755,7 +1947,7 @@ var GLTF_CAR_URL = "./models/car.glb";
         var aL = worldToLocal(w.a, pWorld, axes);
         var bL = worldToLocal(w.b, pWorld, axes);
 
-        var res = segRectDistanceLocal(aL, bL, CAR_HALF_WIDTH, CAR_HALF_LENGTH);
+        var res = segRectDistanceLocal(aL, bL, hx, hy);
 
         if (res.dist < WALL_SIZE) {
           var nL = res.n.clone();
@@ -1970,14 +2162,17 @@ var GLTF_CAR_URL = "./models/car.glb";
     }
 
     // apply to model
+    var yawOff = (me.model.userData && me.model.userData.yawOffset) ? me.model.userData.yawOffset : 0;
     me.model.position.x = me.data.x;
     me.model.position.z = me.data.y;
-    me.model.rotation.y = me.data.dir;
+    me.model.rotation.y = me.data.dir + yawOff;
 
     // wheel steer for built-in model only (children[2] & [3] are front wheels)
-    if (me.model.children && me.model.children.length >= 4) {
-      if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
-      if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
+    if (me.model.userData && me.model.userData.isBuiltIn) {
+      if (me.model.children && me.model.children.length >= 4) {
+        if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
+        if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
+      }
     }
   }
 
@@ -1988,10 +2183,13 @@ var GLTF_CAR_URL = "./models/car.glb";
     camera.fov = camera.fov * 0.88 + targetFov * 0.12;
     camera.updateProjectionMatrix();
 
+    // use physics dir (not model rotation) so GLTF yaw offset never breaks camera
+    var d = me.data.dir;
+
     var target = new THREE.Vector3(
-      me.model.position.x + Math.sin(-me.model.rotation.y) * 5,
+      me.model.position.x + Math.sin(-d) * 5,
       CAM_HEIGHT,
-      me.model.position.z + -Math.cos(-me.model.rotation.y) * 5
+      me.model.position.z + -Math.cos(-d) * 5
     );
 
     var lagPow = Math.pow(CAMERA_LAG, warp);
@@ -2012,7 +2210,9 @@ var GLTF_CAR_URL = "./models/car.glb";
 
       var tx = p.data.x || 0;
       var ty = p.data.y || 0;
-      var tdir = p.data.dir || 0;
+
+      var yawOff = (p.model.userData && p.model.userData.yawOffset) ? p.model.userData.yawOffset : 0;
+      var tdir = (p.data.dir || 0) + yawOff;
 
       p.model.position.x += (tx - p.model.position.x) * clamp(0.18 * warp, 0, 1);
       p.model.position.z += (ty - p.model.position.z) * clamp(0.18 * warp, 0, 1);
