@@ -79,7 +79,7 @@
 var GLTF_CAR_URL = "scene.gltf";
 var GLTF_CAR_SCALE = 0.45;
 var GLTF_CAR_ROT_Y = Math.PI;
-var GLTF_CAR_Y_OFFSET = 0.5;
+var GLTF_CAR_Y_OFFSET = 0.85;
   // --- GLTF fit controls (NEW) ---
   // Auto-fit hitbox to the GLTF model's bounding box (XZ). Stored per-player.
   var GLTF_AUTO_FIT_HITBOX = true;
@@ -95,7 +95,7 @@ var GLTF_TARGET_LENGTH = (2 * CAR_HALF_LENGTH) * 0.75;
   // If auto-scaling, match width as a secondary clamp.
   var GLTF_TARGET_WIDTH = (2 * CAR_HALF_WIDTH);
   // If not auto-scaling, you can force a scale here:
-var GLTF_MANUAL_SCALE = 0.15;
+var GLTF_MANUAL_SCALE = 0.28;
 
   // Auto-center GLTF pivot to its bbox center (recommended for stable rotation/collision feel).
   var GLTF_AUTO_CENTER = true;
@@ -2199,7 +2199,11 @@ if (carGLTFReady && carGLTF) {
     camera.updateProjectionMatrix();
 
     // use physics dir (not model rotation) so GLTF yaw offset never breaks camera
-    var d = me.data.dir;
+var yawOff = (me.model.userData && me.model.userData.yawOffset)
+  ? me.model.userData.yawOffset
+  : 0;
+
+var d = me.data.dir + yawOff;
 
     var target = new THREE.Vector3(
       me.model.position.x + Math.sin(-d) * 5,
