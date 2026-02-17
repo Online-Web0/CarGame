@@ -75,7 +75,7 @@
   // =========================
   // Set this to your car model URL (relative or absolute). Example:
   // var GLTF_CAR_URL = "./models/f1_car.glb";
-  var GLTF_CAR_URL = ""; // leave "" to use built-in car
+var GLTF_CAR_URL = "./models/car.glb";
 
   // =========================
   // ===== Nitro input/state ==
