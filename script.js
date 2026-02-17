@@ -732,7 +732,8 @@ function preloadCarGLTF() {
     spawnY = start.mid.y + forward.y * 5;
 
     // Inverse of fwd = (sin(dir), cos(dir))
-    spawnDir = Math.atan2(forward.x, forward.y) + (Math.PI / 2);
+spawnDir = Math.atan2(forward.x, forward.y) + (Math.PI / 2) + Math.PI;
+spawnDir = wrapAngle(spawnDir);
 
   }
 
