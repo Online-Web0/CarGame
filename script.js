@@ -938,15 +938,19 @@ spawnDir = wrapAngle(spawnDir);
   function buildGLTFCarInstance(hexColorInt) {
     if (!carGLTFReady || !carGLTF) return null;
 
-    // clone raw gltf
-    var raw = carGLTF.clone(true);
-    raw.traverse(function (o) {
-      if (o && o.isMesh) {
-        o.castShadow = true;
-        o.receiveShadow = true;
-        if (o.material) o.material.needsUpdate = true;
-      }
-    });
+raw.traverse(function (o) {
+  if (o && o.isMesh) {
+    o.castShadow = false;
+    o.receiveShadow = false;
+
+    if (o.material) {
+      o.material.emissive = new THREE.Color(0xffffff);
+      o.material.emissiveIntensity = 0.6;
+      o.material.needsUpdate = true;
+    }
+  }
+});
+
 
     // scale
     var scale = GLTF_MANUAL_SCALE;
