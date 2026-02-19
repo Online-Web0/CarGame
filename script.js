@@ -7,6 +7,9 @@
 // - Slipstream boost + visuals
 // - Boost FOV camera effect
 // - Multiplayer sync (Firebase RTDB; anonymous auth; solo fallback)
+// - NEW: MODE SELECT (ORIGINAL vs MODERN) -> then HOST/JOIN/SOLO
+//        ORIGINAL keeps your current classic physics/mechanics unchanged.
+//        MODERN uses a separate physics path (does not alter ORIGINAL tuning).
 
 (function () {
   "use strict";
@@ -43,6 +46,7 @@
   var CAM_HEIGHT = 4;
 
   // ===== Original-like physics (classic) =====
+  // (THIS PATH IS YOUR "OG" BEHAVIOR. IT IS LEFT UNCHANGED.)
   var USE_CLASSIC_PHYSICS = true;
   var CLASSIC_DRAG = 0.99;
   var CLASSIC_TURN_DIV = 5.5;     // your preferred value
@@ -53,14 +57,22 @@
   var TURN_SPEED_FALLOFF = 2.4; // your preferred value
 
   // ===== Drift/grip =====
-var DRIFT_ALIGN_BASE = 0.006;
-var DRIFT_ALIGN_TURN_MULT = 0.15;
-var DRIFT_ALIGN_NITRO_MULT = 0.35;
-var DRIFT_ALIGN_SPEED_FALLOFF = 4.0;
+  var DRIFT_ALIGN_BASE = 0.006;
+  var DRIFT_ALIGN_TURN_MULT = 0.15;
+  var DRIFT_ALIGN_NITRO_MULT = 0.35;
+  var DRIFT_ALIGN_SPEED_FALLOFF = 4.0;
 
-var SIDE_SCRUB = 0.012;
-var SIDE_SCRUB_TURN_MULT = 0.15;
+  var SIDE_SCRUB = 0.012;
+  var SIDE_SCRUB_TURN_MULT = 0.15;
   var SIDE_SCRUB_NITRO_MULT = 0.75;
+
+  // ===== MODERN PHYSICS TUNING (used only when USE_CLASSIC_PHYSICS=false) =====
+  // Does NOT modify your OG physics values.
+  var MODERN_TURN_DIV = 9.0;
+  var MODERN_DRAG = 0.985;
+  var MODERN_ALIGN_RATE = 0.22;      // higher = velocity aligns to heading faster
+  var MODERN_SIDE_DAMP = 0.70;       // lower = kill sideways faster (less drift)
+  var MODERN_BRAKE_MULT = 1.8;
 
   // ===== Car hitbox (rectangle) =====
   // Built-in fallback dimensions. GLTF can auto-fit and override per player.
@@ -71,14 +83,35 @@ var SIDE_SCRUB_TURN_MULT = 0.15;
   var STEER_MAX = Math.PI / 5.4;
 
   // =========================
+  // ===== Game modes =========
+  // =========================
+  var MODES = { MODERN: "modern", ORIGINAL: "original" };
+  var selectedMode = MODES.ORIGINAL;     // default keeps current behavior safe
+  var FORCE_BUILTIN_CAR = false;         // ORIGINAL forces built-in car visuals
+
+  function applyModeLocally(mode) {
+    selectedMode = mode || selectedMode || MODES.ORIGINAL;
+
+    if (selectedMode === MODES.ORIGINAL) {
+      // OG path: do not change any of your classic mechanics math.
+      USE_CLASSIC_PHYSICS = true;
+      FORCE_BUILTIN_CAR = true;
+    } else {
+      USE_CLASSIC_PHYSICS = false;
+      FORCE_BUILTIN_CAR = false;
+    }
+  }
+
+  // =========================
   // ===== OPTIONAL GLTF =====
   // =========================
   // Set this to your car model URL (relative or absolute). Example:
   // var GLTF_CAR_URL = "./models/f1_car.glb";
-var GLTF_CAR_URL = "scene.gltf";
-var GLTF_CAR_SCALE = 0.45;
-var GLTF_CAR_ROT_Y = Math.PI;
-var GLTF_CAR_Y_OFFSET = 0.02; // tiny lift to avoid z-fighting
+  var GLTF_CAR_URL = "scene.gltf";
+  var GLTF_CAR_SCALE = 0.45;
+  var GLTF_CAR_ROT_Y = Math.PI;
+  var GLTF_CAR_Y_OFFSET = 0.02; // tiny lift to avoid z-fighting
+
   // --- GLTF fit controls (NEW) ---
   // Auto-fit hitbox to the GLTF model's bounding box (XZ). Stored per-player.
   var GLTF_AUTO_FIT_HITBOX = true;
@@ -88,20 +121,20 @@ var GLTF_CAR_Y_OFFSET = 0.02; // tiny lift to avoid z-fighting
   var GLTF_HITBOX_SCALE = 1.0;
 
   // Auto-scale GLTF to feel like your built-in car size (recommended).
-var GLTF_AUTO_SCALE = false;
+  var GLTF_AUTO_SCALE = false;
   // If auto-scaling, match the built-in car length (2*CAR_HALF_LENGTH) primarily.
-var GLTF_TARGET_LENGTH = (2 * CAR_HALF_LENGTH) * 0.75;
+  var GLTF_TARGET_LENGTH = (2 * CAR_HALF_LENGTH) * 0.75;
   // If auto-scaling, match width as a secondary clamp.
   var GLTF_TARGET_WIDTH = (2 * CAR_HALF_WIDTH);
   // If not auto-scaling, you can force a scale here:
-var GLTF_MANUAL_SCALE = 1.67;
+  var GLTF_MANUAL_SCALE = 1.67;
 
   // Auto-center GLTF pivot to its bbox center (recommended for stable rotation/collision feel).
   var GLTF_AUTO_CENTER = true;
 
   // If your GLB faces the wrong way, adjust yaw visually without changing physics:
   // 0 = assumes model faces +Z when rotation.y = 0
-var GLTF_YAW_OFFSET = 0;
+  var GLTF_YAW_OFFSET = 0;
 
   // If tinting breaks your textured model, set false.
   var GLTF_TINT_ENABLED = true;
@@ -290,11 +323,11 @@ var GLTF_YAW_OFFSET = 0;
     safeRemove(document.getElementById("startgame"));
     safeRemove(document.getElementById("code"));
     safeRemove(document.getElementById("incode"));
+    safeRemove(document.getElementById("modewrap"));
   }
 
   function hideAllMenusForGameplay() {
     clearModeUI();
-    safeRemove(document.getElementById("modewrap"));
 
     setDisplay("title", "none");
     hideLobbyUI();
@@ -333,22 +366,21 @@ var GLTF_YAW_OFFSET = 0;
   var carGLTFLoading = false;
   var carGLTFWaiters = [];     // callbacks waiting for load (scene or null on fail)
 
- function ensureGLTFLoader() {
-  if (gltfLoader) return;
-  if (!GLTF_CAR_URL) return;
-  if (typeof THREE === "undefined") return;
+  function ensureGLTFLoader() {
+    if (gltfLoader) return;
+    if (!GLTF_CAR_URL) return;
+    if (typeof THREE === "undefined") return;
 
-  if (typeof THREE.GLTFLoader === "undefined") {
-    console.warn("GLTFLoader not found. Include GLTFLoader.js");
-    return;
+    if (typeof THREE.GLTFLoader === "undefined") {
+      console.warn("GLTFLoader not found. Include GLTFLoader.js");
+      return;
+    }
+
+    gltfLoader = new THREE.GLTFLoader();
+    gltfLoader.setPath("models/");
   }
 
-  gltfLoader = new THREE.GLTFLoader();
-  gltfLoader.setPath("models/");
-}
-
-function preloadCarGLTF() {
-
+  function preloadCarGLTF() {
     if (!GLTF_CAR_URL) return;
     ensureGLTFLoader();
     if (!gltfLoader) return;
@@ -399,8 +431,6 @@ function preloadCarGLTF() {
     }
 
     scene = new THREE.Scene();
-
-
     scene.background = new THREE.Color(0x7fb0ff);
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -575,7 +605,6 @@ function preloadCarGLTF() {
         // Correct conversion:
         spawnDir = deg * Math.PI / 180; // +90 more (right)
 
-
         hasSpawn = true;
       }
 
@@ -733,10 +762,8 @@ function preloadCarGLTF() {
     spawnY = start.mid.y + forward.y * 5;
 
     // Inverse of fwd = (sin(dir), cos(dir))
-spawnDir = Math.atan2(forward.x, forward.y);
-spawnDir = wrapAngle(spawnDir);
-
-
+    spawnDir = Math.atan2(forward.x, forward.y);
+    spawnDir = wrapAngle(spawnDir);
   }
 
   // =========================
@@ -867,9 +894,9 @@ spawnDir = wrapAngle(spawnDir);
     }
 
     var FL = { x: -1.08, y: 0.36, z: 1.52 };
-    var FR = { x:  1.08, y: 0.36, z: 1.52 };
+    var FR = { x: 1.08, y: 0.36, z: 1.52 };
     var BL = { x: -1.08, y: 0.40, z: -1.32 };
-    var BR = { x:  1.08, y: 0.40, z: -1.32 };
+    var BR = { x: 1.08, y: 0.40, z: -1.32 };
 
     var frontLeft = wheelMesh(0.36, 0.30);
     frontLeft.position.set(FL.x, FL.y, FL.z);
@@ -899,7 +926,6 @@ spawnDir = wrapAngle(spawnDir);
       if (!m) return;
 
       // If material has a map, tinting often looks bad. Keep map look by skipping color override.
-      // If you want full tint always, delete the "if (m.map)" checks.
       if (Array.isArray(m)) {
         for (var i = 0; i < m.length; i++) {
           if (!m[i]) continue;
@@ -939,36 +965,35 @@ spawnDir = wrapAngle(spawnDir);
 
     // clone raw gltf
     var raw = carGLTF.clone(true);
-  raw.traverse(function (o) {
-  if (!o || !o.isMesh) return;
 
-  o.castShadow = false;
-  o.receiveShadow = false;
+    raw.traverse(function (o) {
+      if (!o || !o.isMesh) return;
 
-  if (!o.material) return;
+      o.castShadow = false;
+      o.receiveShadow = false;
 
-  function convert(mat) {
-    if (!mat) return;
+      if (!o.material) return;
 
-    o.material = new THREE.MeshBasicMaterial({
-      map: mat.map || null,
-      color: 0xffffff
+      function convert(mat) {
+        if (!mat) return;
+
+        o.material = new THREE.MeshBasicMaterial({
+          map: mat.map || null,
+          color: 0xffffff
+        });
+      }
+
+      if (Array.isArray(o.material)) {
+        o.material = o.material.map(function (m) {
+          return new THREE.MeshBasicMaterial({
+            map: m.map || null,
+            color: 0xffffff
+          });
+        });
+      } else {
+        convert(o.material);
+      }
     });
-  }
-
-  if (Array.isArray(o.material)) {
-    o.material = o.material.map(function (m) {
-      return new THREE.MeshBasicMaterial({
-        map: m.map || null,
-        color: 0xffffff
-      });
-    });
-  } else {
-    convert(o.material);
-  }
-});
-
-
 
     // scale
     var scale = GLTF_MANUAL_SCALE;
@@ -992,7 +1017,7 @@ spawnDir = wrapAngle(spawnDir);
       scale = clamp(scale, minS, maxS);
     }
 
-raw.scale.set(scale, scale, scale * 0.65);
+    raw.scale.set(scale, scale, scale * 0.65);
     raw.updateMatrixWorld(true);
 
     // optional center to bbox
@@ -1009,16 +1034,17 @@ raw.scale.set(scale, scale, scale * 0.65);
       raw.position.sub(center);
       raw.updateMatrixWorld(true);
     }
-// --- ground the model so its lowest point sits on y=0 ---
-raw.updateMatrixWorld(true);
-var bbY = new THREE.Box3().setFromObject(raw);
-var minY = bbY.min.y;
 
-// move model up/down so bbox bottom is at y=0, then apply small offset
-raw.position.y -= minY;
-raw.position.y += (GLTF_CAR_Y_OFFSET || 0);
+    // --- ground the model so its lowest point sits on y=0 ---
+    raw.updateMatrixWorld(true);
+    var bbY = new THREE.Box3().setFromObject(raw);
+    var minY = bbY.min.y;
 
-raw.updateMatrixWorld(true);
+    // move model up/down so bbox bottom is at y=0, then apply small offset
+    raw.position.y -= minY;
+    raw.position.y += (GLTF_CAR_Y_OFFSET || 0);
+
+    raw.updateMatrixWorld(true);
 
     // fit hitbox from raw only (NO slipfx included)
     var halfW = CAR_HALF_WIDTH;
@@ -1089,8 +1115,8 @@ raw.updateMatrixWorld(true);
   function createCarModel(hexColorInt, playerKey, cb) {
     ensureEngine();
 
-    // If no GLTF configured, return built-in immediately
-    if (!GLTF_CAR_URL) {
+    // If no GLTF configured OR mode forces built-in, return built-in immediately
+    if (!GLTF_CAR_URL || FORCE_BUILTIN_CAR) {
       var built = makeBuiltInCar(hexColorInt);
       built.userData.playerKey = playerKey;
       cb(built);
@@ -1098,21 +1124,18 @@ raw.updateMatrixWorld(true);
     }
 
     // If GLTF already loaded, use it immediately
-if (carGLTFReady && carGLTF) {
-  var model = buildGLTFCarInstance(hexColorInt);
-  if (!model) {
-    var built = makeBuiltInCar(hexColorInt);
-    built.userData.playerKey = playerKey;
-    cb(built);
-    return;
-  }
-  model.userData.playerKey = playerKey;
-  cb(model);
-  return;
-}
-
-
-
+    if (carGLTFReady && carGLTF) {
+      var model = buildGLTFCarInstance(hexColorInt);
+      if (!model) {
+        var built2 = makeBuiltInCar(hexColorInt);
+        built2.userData.playerKey = playerKey;
+        cb(built2);
+        return;
+      }
+      model.userData.playerKey = playerKey;
+      cb(model);
+      return;
+    }
 
     // Otherwise: return built-in NOW (game never blocks),
     // then swap to GLTF when it finishes loading.
@@ -1373,6 +1396,7 @@ if (carGLTFReady && carGLTF) {
     if (settingsEl) setTimeout(function () { settingsEl.style.transform = "translate3d(0, 0, 0)"; }, 500);
   }
 
+  // NEW: Mode select -> Host/Join/Solo
   function showModeMenu() {
     ensureEngine();
     setupInputOnce();
@@ -1392,6 +1416,14 @@ if (carGLTFReady && carGLTF) {
     modeWrapEl.id = "modewrap";
     if (foreEl) foreEl.appendChild(modeWrapEl);
 
+    var info = makeDiv(null, "info", "Choose game mode");
+    info.style.position = "absolute";
+    info.style.top = "10vh";
+    info.style.left = "0";
+    info.style.width = "100%";
+    info.style.textAlign = "center";
+    modeWrapEl.appendChild(info);
+
     function mkButton(text, topVh, onClick) {
       var b = makeDiv(null, "button", text);
       b.style.top = "calc(" + topVh + "vh - 8vmin)";
@@ -1401,8 +1433,44 @@ if (carGLTFReady && carGLTF) {
       return b;
     }
 
-    mkButton("HOST", 30, function () { hostFlow(); });
-    mkButton("JOIN", 55, function () { joinFlow(); });
+    mkButton("MODERN MODE", 40, function () {
+      applyModeLocally(MODES.MODERN);
+      showHostJoinMenu();
+    });
+
+    mkButton("ORIGINAL MODE", 70, function () {
+      applyModeLocally(MODES.ORIGINAL);
+      showHostJoinMenu();
+    });
+  }
+
+  function showHostJoinMenu() {
+    clearModeUI();
+
+    modeWrapEl = document.createElement("div");
+    modeWrapEl.id = "modewrap";
+    if (foreEl) foreEl.appendChild(modeWrapEl);
+
+    var info = makeDiv(null, "info", "Mode: <b>" + String(selectedMode || "").toUpperCase() + "</b>");
+    info.style.position = "absolute";
+    info.style.top = "10vh";
+    info.style.left = "0";
+    info.style.width = "100%";
+    info.style.textAlign = "center";
+    modeWrapEl.appendChild(info);
+
+    function mkButton(text, topVh, onClick) {
+      var b = makeDiv(null, "button", text);
+      b.style.top = "calc(" + topVh + "vh - 8vmin)";
+      b.onclick = onClick;
+      modeWrapEl.appendChild(b);
+      setTimeout(function () { b.style.transform = "translate3d(0,0,0)"; }, 20);
+      return b;
+    }
+
+    mkButton("BACK", 22, function () { showModeMenu(); });
+    mkButton("HOST", 40, function () { hostFlow(); });
+    mkButton("JOIN", 60, function () { joinFlow(); });
     mkButton("SOLO", 80, function () { soloFlow(); });
   }
 
@@ -1476,7 +1544,7 @@ if (carGLTFReady && carGLTF) {
     try {
       if (playersRef) playersRef.off();
       if (startRef) startRef.off();
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function clearPlayers() {
@@ -1491,7 +1559,8 @@ if (carGLTFReady && carGLTF) {
     me = null;
   }
 
-  function connectToRoom(code, hostFlag) {
+  // NEW: host sets room mode, join reads it
+  function connectToRoom(code, hostFlag, hostMode) {
     if (meKey) return; // prevents multiple cars spawning
     ensureEngine();
 
@@ -1509,39 +1578,62 @@ if (carGLTFReady && carGLTF) {
     }
 
     roomRef = database.ref("rooms/" + ROOM);
-    playersRef = roomRef.child("players");
-    startRef = roomRef.child("startedAt");
 
-    createLocalPlayerFirebase();
+    function startRoomWiring() {
+      playersRef = roomRef.child("players");
+      startRef = roomRef.child("startedAt");
 
-    playersRef.on("child_added", function (snap) {
-      var key = snap.key;
-      var data = snap.val();
-      if (!data) return;
-      upsertPlayer(key, data);
-    });
+      createLocalPlayerFirebase();
 
-    playersRef.on("child_changed", function (snap) {
-      var key = snap.key;
-      var data = snap.val();
-      if (!data) return;
-      upsertPlayer(key, data);
-    });
+      playersRef.on("child_added", function (snap) {
+        var key = snap.key;
+        var data = snap.val();
+        if (!data) return;
+        upsertPlayer(key, data);
+      });
 
-    playersRef.on("child_removed", function (snap) {
-      removePlayer(snap.key);
-    });
+      playersRef.on("child_changed", function (snap) {
+        var key = snap.key;
+        var data = snap.val();
+        if (!data) return;
+        upsertPlayer(key, data);
+      });
 
-    startRef.on("value", function (snap) {
-      var startedAt = snap.val();
-      if (!startedAt) {
-        if (!gameStarted) {
-          showOverlayMsg(isHost ? "Share code <b>" + ROOM + "</b> — then press START GAME." : "Joined <b>" + ROOM + "</b>. Waiting for host...");
+      playersRef.on("child_removed", function (snap) {
+        removePlayer(snap.key);
+      });
+
+      startRef.on("value", function (snap) {
+        var startedAt = snap.val();
+        if (!startedAt) {
+          if (!gameStarted) {
+            showOverlayMsg(
+              isHost
+                ? "Mode: <b>" + String(selectedMode).toUpperCase() + "</b><br>Share code <b>" + ROOM + "</b> — then press START GAME."
+                : "Mode: <b>" + String(selectedMode).toUpperCase() + "</b><br>Joined <b>" + ROOM + "</b>. Waiting for host..."
+            );
+          }
+          return;
         }
-        return;
-      }
-      startGame();
-    });
+        startGame();
+      });
+    }
+
+    if (isHost) {
+      applyModeLocally(hostMode || selectedMode || MODES.ORIGINAL);
+      roomRef.child("mode").set(selectedMode);
+      startRoomWiring();
+    } else {
+      roomRef.child("mode").once("value").then(function (snap) {
+        var m = snap.val();
+        if (m === MODES.MODERN || m === MODES.ORIGINAL) applyModeLocally(m);
+        else applyModeLocally(MODES.ORIGINAL);
+        startRoomWiring();
+      }).catch(function () {
+        applyModeLocally(MODES.ORIGINAL);
+        startRoomWiring();
+      });
+    }
   }
 
   function createLocalPlayerFirebase() {
@@ -1654,7 +1746,7 @@ if (carGLTFReady && carGLTF) {
       roomRef.child("startedAt").set(firebase.database.ServerValue.TIMESTAMP);
     };
 
-    connectToRoom(code, true);
+    connectToRoom(code, true, selectedMode);
   }
 
   function joinFlow() {
@@ -1694,6 +1786,10 @@ if (carGLTFReady && carGLTF) {
 
   function soloFlow() {
     ensureEngine();
+
+    // use the selected mode locally
+    applyModeLocally(selectedMode);
+
     clearPlayers();
     detachRoomListeners();
     ROOM = null;
@@ -1746,7 +1842,7 @@ if (carGLTFReady && carGLTF) {
     safeRemove(document.getElementById("startgame"));
 
     showOverlayMsg("");
-    startCountdown(function () {});
+    startCountdown(function () { });
 
     setTimeout(function () { playerCollisionEnabled = true; }, 5000);
   }
@@ -1834,9 +1930,9 @@ if (carGLTFReady && carGLTF) {
 
     if (
       clip(-dx, a.x + hx) &&
-      clip( dx, hx - a.x) &&
+      clip(dx, hx - a.x) &&
       clip(-dy, a.y + hy) &&
-      clip( dy, hy - a.y)
+      clip(dy, hy - a.y)
     ) {
       return t0 <= t1;
     }
@@ -1880,9 +1976,9 @@ if (carGLTFReady && carGLTF) {
 
     var corners = [
       vec2(-hx, -hy),
-      vec2(-hx,  hy),
-      vec2( hx, -hy),
-      vec2( hx,  hy)
+      vec2(-hx, hy),
+      vec2(hx, -hy),
+      vec2(hx, hy)
     ];
     for (var i = 0; i < corners.length; i++) {
       var c = corners[i];
@@ -2103,6 +2199,10 @@ if (carGLTFReady && carGLTF) {
       nitroFuel = Math.min(NITRO_MAX, nitroFuel + NITRO_REGEN * dtSec);
     }
 
+    // =========================
+    // ===== ORIGINAL (CLASSIC) PHYSICS PATH =====
+    // (LEFT UNCHANGED)
+    // =========================
     if (USE_CLASSIC_PHYSICS) {
       var usingNitro = nitroActive;
 
@@ -2186,6 +2286,78 @@ if (carGLTFReady && carGLTF) {
         me.data.yv *= sc;
       }
     }
+    // =========================
+    // ===== MODERN PHYSICS PATH =====
+    // (separate from OG; does not change OG tuning)
+    // =========================
+    else {
+      var usingNitro2 = nitroActive;
+
+      // understeer scaling with speed
+      var spM = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+      var steerScaleM = 1 / (1 + spM * TURN_SPEED_FALLOFF);
+
+      // turn
+      me.data.dir += (me.data.steer / MODERN_TURN_DIV) * warp * steerScaleM;
+      me.data.dir = wrapAngle(me.data.dir);
+
+      // throttle
+      var accelM = SPEED;
+      if (usingNitro2) accelM *= NITRO_MULT;
+      if (slipFactor > 0.001) accelM *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
+
+      if (up) {
+        me.data.xv += Math.sin(me.data.dir) * accelM * warp;
+        me.data.yv += Math.cos(me.data.dir) * accelM * warp;
+      }
+      if (down) {
+        me.data.xv -= Math.sin(me.data.dir) * accelM * MODERN_BRAKE_MULT * warp;
+        me.data.yv -= Math.cos(me.data.dir) * accelM * MODERN_BRAKE_MULT * warp;
+      }
+
+      // drag
+      var dragM = Math.pow(MODERN_DRAG, warp);
+      me.data.xv *= dragM;
+      me.data.yv *= dragM;
+
+      // align velocity to heading (tighter than OG drift)
+      var vxM = me.data.xv, vyM = me.data.yv;
+      var spV = Math.sqrt(vxM * vxM + vyM * vyM);
+
+      if (spV > 1e-6) {
+        var velAngM = Math.atan2(vxM, vyM);
+        var diffM = wrapAngle(me.data.dir - velAngM);
+
+        var alignM = clamp(MODERN_ALIGN_RATE * dtSec * 60, 0, 1);
+        velAngM += diffM * alignM;
+
+        vxM = Math.sin(velAngM) * spV;
+        vyM = Math.cos(velAngM) * spV;
+
+        // reduce sideways faster
+        var fwdM = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
+        var sideM = vec2(fwdM.y, -fwdM.x);
+        var vfM = vxM * fwdM.x + vyM * fwdM.y;
+        var vlM = vxM * sideM.x + vyM * sideM.y;
+
+        vlM *= Math.pow(MODERN_SIDE_DAMP, warp);
+
+        me.data.xv = fwdM.x * vfM + sideM.x * vlM;
+        me.data.yv = fwdM.y * vfM + sideM.y * vlM;
+      }
+
+      // speed cap
+      var capM = MAX_SPEED;
+      if (usingNitro2) capM *= 1.5;
+      if (slipFactor > 0.001) capM *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
+
+      var spCap = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+      if (spCap > capM && spCap > 1e-9) {
+        var scM = capM / spCap;
+        me.data.xv *= scM;
+        me.data.yv *= scM;
+      }
+    }
 
     // substeps for collision stability
     var steps = Math.ceil(Math.max(Math.abs(me.data.xv), Math.abs(me.data.yv)) * 6);
@@ -2229,33 +2401,31 @@ if (carGLTFReady && carGLTF) {
     }
   }
 
- function updateCamera(warp) {
-  if (!me || !me.model) return;
+  function updateCamera(warp) {
+    if (!me || !me.model) return;
 
-  var targetFov = nitroActive ? BOOST_FOV : BASE_FOV;
-  camera.fov = camera.fov * 0.88 + targetFov * 0.12;
-  camera.updateProjectionMatrix();
+    var targetFov = nitroActive ? BOOST_FOV : BASE_FOV;
+    camera.fov = camera.fov * 0.88 + targetFov * 0.12;
+    camera.updateProjectionMatrix();
 
-  // IMPORTANT: camera follows PHYSICS dir only (no yawOffset)
-  var d = me.data.dir;
+    // IMPORTANT: camera follows PHYSICS dir only (no yawOffset)
+    var d = me.data.dir;
 
-  // keep your original math, just with d = me.data.dir
-  var target = new THREE.Vector3(
-    me.model.position.x + Math.sin(-d) * 5,
-    CAM_HEIGHT,
-    me.model.position.z + -Math.cos(-d) * 5
-  );
+    var target = new THREE.Vector3(
+      me.model.position.x + Math.sin(-d) * 5,
+      CAM_HEIGHT,
+      me.model.position.z + -Math.cos(-d) * 5
+    );
 
-  var lagPow = Math.pow(CAMERA_LAG, warp);
-  camera.position.set(
-    camera.position.x * lagPow + target.x * (1 - lagPow),
-    CAM_HEIGHT,
-    camera.position.z * lagPow + target.z * (1 - lagPow)
-  );
+    var lagPow = Math.pow(CAMERA_LAG, warp);
+    camera.position.set(
+      camera.position.x * lagPow + target.x * (1 - lagPow),
+      CAM_HEIGHT,
+      camera.position.z * lagPow + target.z * (1 - lagPow)
+    );
 
-  camera.lookAt(me.model.position);
-}
-
+    camera.lookAt(me.model.position);
+  }
 
   function updateRemoteVisuals(warp) {
     for (var k in players) {
@@ -2407,14 +2577,14 @@ if (carGLTFReady && carGLTF) {
   window.menu2 = showModeMenu;
   window.host = hostFlow;
   window.joinGame = joinFlow;
-  window.codeCheck = function () {};
+  window.codeCheck = function () { };
   window.updateColor = function (x01) { setSliderFrom01(x01); };
 
   // Clean up firebase presence on close
   window.addEventListener("beforeunload", function () {
     try {
       if (me && me.ref) me.ref.remove();
-    } catch (e) {}
+    } catch (e) { }
   });
 
 })();
