@@ -1,160 +1,114 @@
-// CarGame - script.js (single file, no dependencies beyond three.js + firebase)
-// - Optional GLTF car (set GLTF_CAR_URL). Falls back to built-in F1.
-// - Rectangular hitbox collisions (walls + cars)  ✅ now auto-fit for GLTF
-// - Reverse steering behavior (left/right as specified)
-// - Nitro lockout (must release Shift to re-arm after empty)
-// - Nitro bar visible only in game
-// - Slipstream boost + visuals
-// - Boost FOV camera effect
-// - Multiplayer sync (Firebase RTDB; anonymous auth; solo fallback)
-// - NEW: MODE SELECT (ORIGINAL vs MODERN) -> then HOST/JOIN/SOLO
-//        ORIGINAL keeps your current classic physics/mechanics unchanged.
-//        MODERN uses a separate physics path (does not alter ORIGINAL tuning).
+// CarGame - script.js (single file; expects three.js (+ optional GLTFLoader) and optional Firebase RTDB)
+// What you asked for:
+// ✅ ORIGINAL mode = original (default) map, original built-in car, NO nitro, no modern boosts.
+// ✅ MODERN mode = custom map via editor/import, optional GLTF car, nitro + slipstream + boost-FOV.
+// ✅ Host/Join/Solo flow + room sync (mode + map code).
+// ✅ Does NOT require you to change HTML; it safely creates missing UI bits if needed.
+//
+// Notes:
+// - "Original map" is taken from whatever trackcode is on the page at first load.
+//   That becomes the locked Original map forever (until page refresh).
+// - Modern map is whatever you import/export/edit.
+//
+// If your project uses a different element than #trackcode to store map code,
+// change TRACKCODE_EL_ID below.
 
 (function () {
   "use strict";
 
   // =========================
-  // ===== USER TUNING =======
+  // ====== CONFIG ===========
   // =========================
+  var TRACKCODE_EL_ID = "trackcode";
+
+  // Gameplay tuning (shared baseline)
   var SPEED = 0.016;
   var CAMERA_LAG = 0.82;
-  var COLLISION = 1.1;      // (optional) used if you want to scale player collision push; kept for compatibility
   var BOUNCE = 1.45;
-  var mapscale = 500;
-  var VR = false;
-  var BOUNCE_CORRECT = 0.01;
-
-  // wall collision thickness margin (smaller = tighter)
-  var WALL_SIZE = 0.35;
-
-  var MOUNTAIN_DIST = 2500;
   var OOB_DIST = 2000;
   var LAPS = 3;
 
-  // ===== Nitro tuning =====
-  var NITRO_MULT = 2.0;
-  var NITRO_MAX = 100;
-  var nitroFuel = NITRO_MAX;
-  var NITRO_DRAIN = 45;   // per second
-  var NITRO_REGEN = 15;   // per second
+  // Steering (your preferred)
+  var STEER_MAX = Math.PI / 5.4;
 
-  // ===== Movement tuning =====
-  var MAX_SPEED = 0.30;
-  var STEER_MIN = 0.05;
-  var STEER_SPEED = 0.12;
-  var CAM_HEIGHT = 4;
+  // Understeer at speed (your preferred)
+  var TURN_SPEED_FALLOFF = 2.4;
 
-  // ===== Original-like physics (classic) =====
-  // (THIS PATH IS YOUR "OG" BEHAVIOR. IT IS LEFT UNCHANGED.)
-  var USE_CLASSIC_PHYSICS = true;
-  var CLASSIC_DRAG = 0.99;
-  var CLASSIC_TURN_DIV = 5.5;     // your preferred value
-  var CLASSIC_AUTO_FORWARD = false;
-  var CLASSIC_MAX_SPEED = 0.40;
+  // Classic turn divisor (your preferred OG feel)
+  var CLASSIC_TURN_DIV = 5.5;
 
-  // Understeer at speed (higher = harder to turn fast)
-  var TURN_SPEED_FALLOFF = 2.4; // your preferred value
+  // Wall collision thickness margin (smaller = tighter)
+  var WALL_SIZE = 0.35;
 
-  // ===== Drift/grip =====
-  var DRIFT_ALIGN_BASE = 0.006;
-  var DRIFT_ALIGN_TURN_MULT = 0.15;
-  var DRIFT_ALIGN_NITRO_MULT = 0.35;
-  var DRIFT_ALIGN_SPEED_FALLOFF = 4.0;
-
-  var SIDE_SCRUB = 0.012;
-  var SIDE_SCRUB_TURN_MULT = 0.15;
-  var SIDE_SCRUB_NITRO_MULT = 0.75;
-
-  // ===== MODERN PHYSICS TUNING (used only when USE_CLASSIC_PHYSICS=false) =====
-  // Does NOT modify your OG physics values.
-  var MODERN_TURN_DIV = 9.0;
-  var MODERN_DRAG = 0.985;
-  var MODERN_ALIGN_RATE = 0.22;      // higher = velocity aligns to heading faster
-  var MODERN_SIDE_DAMP = 0.70;       // lower = kill sideways faster (less drift)
-  var MODERN_BRAKE_MULT = 1.8;
-
-  // ===== Car hitbox (rectangle) =====
-  // Built-in fallback dimensions. GLTF can auto-fit and override per player.
+  // Built-in car hitbox (fallback)
   var CAR_HALF_WIDTH = 1.08;
   var CAR_HALF_LENGTH = 1.85;
 
-  // ===== Steering max (your value) =====
-  var STEER_MAX = Math.PI / 5.4;
+  // ============ MODERN FEATURES ============
+  var MODERN_ENABLE_NITRO = true;
+  var MODERN_ENABLE_SLIPSTREAM = true;
 
-  // =========================
-  // ===== Game modes =========
-  // =========================
-  var MODES = { MODERN: "modern", ORIGINAL: "original" };
-  var selectedMode = MODES.ORIGINAL;     // default keeps current behavior safe
-  var FORCE_BUILTIN_CAR = false;         // ORIGINAL forces built-in car visuals
+  // Nitro
+  var NITRO_MULT = 2.0;
+  var NITRO_MAX = 100;
+  var NITRO_DRAIN = 45;   // per second
+  var NITRO_REGEN = 15;   // per second
 
-  function applyModeLocally(mode) {
-    selectedMode = mode || selectedMode || MODES.ORIGINAL;
-
-    if (selectedMode === MODES.ORIGINAL) {
-      // OG path: do not change any of your classic mechanics math.
-      USE_CLASSIC_PHYSICS = true;
-      FORCE_BUILTIN_CAR = true;
-    } else {
-      USE_CLASSIC_PHYSICS = false;
-      FORCE_BUILTIN_CAR = false;
-    }
-  }
-
-  // =========================
-  // ===== OPTIONAL GLTF =====
-  // =========================
-  // Set this to your car model URL (relative or absolute). Example:
-  // var GLTF_CAR_URL = "./models/f1_car.glb";
-  var GLTF_CAR_URL = "scene.gltf";
-  var GLTF_CAR_SCALE = 0.45;
-  var GLTF_CAR_ROT_Y = Math.PI;
-  var GLTF_CAR_Y_OFFSET = 0.02; // tiny lift to avoid z-fighting
-
-  // --- GLTF fit controls (NEW) ---
-  // Auto-fit hitbox to the GLTF model's bounding box (XZ). Stored per-player.
-  var GLTF_AUTO_FIT_HITBOX = true;
-  // Extra padding added to half-extents (world units). Lower = tighter.
-  var GLTF_HITBOX_PADDING = 0.02;
-  // Multiply fitted half-extents. 1.0 = exact bbox; <1 tighter; >1 looser.
-  var GLTF_HITBOX_SCALE = 1.0;
-
-  // Auto-scale GLTF to feel like your built-in car size (recommended).
-  var GLTF_AUTO_SCALE = false;
-  // If auto-scaling, match the built-in car length (2*CAR_HALF_LENGTH) primarily.
-  var GLTF_TARGET_LENGTH = (2 * CAR_HALF_LENGTH) * 0.75;
-  // If auto-scaling, match width as a secondary clamp.
-  var GLTF_TARGET_WIDTH = (2 * CAR_HALF_WIDTH);
-  // If not auto-scaling, you can force a scale here:
-  var GLTF_MANUAL_SCALE = 1.67;
-
-  // Auto-center GLTF pivot to its bbox center (recommended for stable rotation/collision feel).
-  var GLTF_AUTO_CENTER = true;
-
-  // If your GLB faces the wrong way, adjust yaw visually without changing physics:
-  // 0 = assumes model faces +Z when rotation.y = 0
-  var GLTF_YAW_OFFSET = 0;
-
-  // If tinting breaks your textured model, set false.
-  var GLTF_TINT_ENABLED = true;
-
-  // =========================
-  // ===== Nitro input/state ==
-  // =========================
-  var nitro = false;          // Shift currently held
-  var nitroArmed = false;     // set true on a fresh Shift press
-  var nitroLock = false;      // locks after fuel hits 0 until Shift released
-  var nitroActive = false;    // true only while boost actually applies
-
-  // ===== Slipstream tuning =====
+  // Slipstream
   var SLIP_DIST = 11.0;
   var SLIP_WIDTH = 2.2;
   var SLIP_ACCEL_BONUS = 0.70;
   var SLIP_TOPSPEED_BONUS = 0.22;
 
-  var slipTargetKey = null;
-  var slipFactor = 0;
+  // FOV
+  var BASE_FOV = 90;
+  var BOOST_FOV = 100;
+
+  // GLTF car (MODERN only)
+  // Set GLTF_CAR_URL to "" to disable GLTF usage entirely.
+  var GLTF_CAR_URL = "scene.gltf";
+  var GLTF_PATH_PREFIX = "models/";  // used by loader.setPath
+  var GLTF_MANUAL_SCALE = 1.67;
+  var GLTF_YAW_OFFSET = 0;
+  var GLTF_CAR_Y_OFFSET = 0.02;
+
+  var GLTF_AUTO_FIT_HITBOX = true;
+  var GLTF_HITBOX_PADDING = 0.02;
+  var GLTF_HITBOX_SCALE = 1.0;
+
+  // =========================
+  // ====== MODES ============
+  // =========================
+  var MODES = { ORIGINAL: "original", MODERN: "modern" };
+  var selectedMode = MODES.ORIGINAL;
+
+  // Active mode flags (set by applyModeLocally)
+  var mode_forceBuiltInCar = true;
+  var mode_enableNitro = false;
+  var mode_enableSlipstream = false;
+  var mode_boostFov = false;
+  var mode_lockToOriginalMap = true;
+
+  function applyModeLocally(mode) {
+    selectedMode = mode || selectedMode || MODES.ORIGINAL;
+
+    if (selectedMode === MODES.ORIGINAL) {
+      mode_forceBuiltInCar = true;
+      mode_enableNitro = false;
+      mode_enableSlipstream = false;
+      mode_boostFov = false;
+      mode_lockToOriginalMap = true;
+    } else {
+      mode_forceBuiltInCar = false;
+      mode_enableNitro = !!MODERN_ENABLE_NITRO;
+      mode_enableSlipstream = !!MODERN_ENABLE_SLIPSTREAM;
+      mode_boostFov = !!MODERN_ENABLE_NITRO;
+      mode_lockToOriginalMap = false;
+    }
+
+    syncMapToMode();
+    syncNitroUiVisibility();
+  }
 
   // =========================
   // ===== Firebase ==========
@@ -188,26 +142,31 @@
   }
 
   // =========================
-  // ===== Three.js globals ===
+  // ===== Three.js ==========
   // =========================
-  var scene, renderer, camera;
-  var mapGroup, cpGroup, decoGroup;
-  var ground;
+  var THREE_OK = (typeof THREE !== "undefined");
+  if (!THREE_OK) throw new Error("THREE is not loaded. Include three.js before script.js");
 
-  // ===== Map physics data =====
+  var scene, renderer, camera;
+  var mapGroup, cpGroup, decoGroup, ground;
+
+  // Map physics data
   var wallSegs = [];  // {a:V2,b:V2,dir:V2,len2:number,mesh:Mesh}
   var cpSegs = [];    // checkpoints; [0]=start line
   var spawnX = 0, spawnY = 0, spawnDir = 0;
 
-  // ===== Multiplayer/game state =====
+  // =========================
+  // ===== State =============
+  // =========================
   var ROOM = null;
   var isHost = false;
   var roomRef = null;
   var playersRef = null;
   var startRef = null;
+  var modeRef = null;
+  var mapRef = null;
 
-  // players[k] => {key, data, model, label, ref, isMe, halfW, halfL, lastSend}
-  var players = {};
+  var players = {}; // players[k] => {key,data,model,label,ref,isMe,halfW,halfL,lastSend}
   var meKey = null;
   var me = null;
 
@@ -215,87 +174,76 @@
   var gameSortaStarted = false;
   var playerCollisionEnabled = false;
 
-  // ===== Input state =====
-  var left = false;
-  var right = false;
-  var up = false;
-  var down = false;
-  var mobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  // =========================
+  // ===== Inputs ============
+  // =========================
+  var left = false, right = false, up = false, down = false;
+  var nitroHeld = false;
+  var nitroArmed = false;
+  var nitroLock = false;
+  var nitroActive = false;
+  var nitroFuel = NITRO_MAX;
 
-  // ===== UI elements =====
+  // Slipstream runtime
+  var slipTargetKey = null;
+  var slipFactor = 0;
+
+  // =========================
+  // ===== UI refs ===========
+  // =========================
   var foreEl, titleEl, startEl, nameEl, pickerEl, sliderEl, countdownEl, lapEl, settingsEl, toolbarEl;
   var modeWrapEl = null;
   var overlayMsgEl = null;
 
-  // Global color
+  // Color state
   var color = "#ff3030";
 
+  // Track codes
+  var originalMapCode = ""; // captured at load
+  var modernMapCode = "";   // user-imported/edited
+
   // =========================
-  // ===== Utilities =========
+  // ===== Utils =============
   // =========================
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function safeRemove(el) { if (!el) return; try { el.remove(); } catch (e) {} }
-
-  function makeDiv(id, className, text) {
+  function makeDiv(id, className, html) {
     var d = document.createElement("div");
     if (id) d.id = id;
     if (className) d.className = className;
-    if (typeof text === "string") d.innerHTML = text;
+    if (typeof html === "string") d.innerHTML = html;
     return d;
   }
-
   function vec2(x, y) { return new THREE.Vector2(x, y); }
-
   function wrapAngle(a) {
     a = (a + Math.PI) % (2 * Math.PI);
     if (a < 0) a += 2 * Math.PI;
     return a - Math.PI;
   }
-
   function reflect2(v, n) {
     var d = v.dot(n);
     return v.clone().sub(n.clone().multiplyScalar(2 * d));
   }
 
   // =========================
-  // ===== Track code =========
+  // ===== Track code IO =====
   // =========================
+  function getTrackEl() { return document.getElementById(TRACKCODE_EL_ID); }
   function getTrackCode() {
-    var el = document.getElementById("trackcode");
-    if (!el) return "";
-    return (el.textContent || "").trim();
+    var el = getTrackEl();
+    return el ? String(el.textContent || "").trim() : "";
   }
-
   function setTrackCode(str) {
-    var el = document.getElementById("trackcode");
+    var el = getTrackEl();
     if (!el) return;
-    el.textContent = (str || "").trim();
-    buildMapFromTrackCode(getTrackCode());
+    el.textContent = String(str || "").trim();
   }
   window.setTrackCode = setTrackCode;
 
-  // ===== Coordinate parsing =====
-  var MIRROR_X = false;
-
-  function parseV2(tok) {
-    var parts = tok.split(",");
-    if (parts.length !== 2) return null;
-
-    var x = parseFloat(parts[0]);
-    var y = parseFloat(parts[1]);
-    if (!isFinite(x) || !isFinite(y)) return null;
-
-    if (MIRROR_X) x = -x;
-    return vec2(x, -y); // editor y -> game z (negated)
-  }
-
-  function parseSeg(tok) {
-    var p = tok.split("/");
-    if (p.length !== 2) return null;
-    var a = parseV2(p[0]);
-    var b = parseV2(p[1]);
-    if (!a || !b) return null;
-    return { a: a, b: b };
+  function syncMapToMode() {
+    var code = mode_lockToOriginalMap ? originalMapCode : modernMapCode;
+    if (code && code !== getTrackCode()) setTrackCode(code);
+    buildMapFromTrackCode(code);
   }
 
   // =========================
@@ -354,81 +302,75 @@
   }
 
   // =========================
+  // ===== Nitro UI ===========
+  // =========================
+  function ensureNitroUiOnce() {
+    if (ensureNitroUiOnce._did) return;
+    ensureNitroUiOnce._did = true;
+
+    if (!document.getElementById("nitroStyle")) {
+      var ns = document.createElement("style");
+      ns.id = "nitroStyle";
+      ns.textContent =
+        "#nitrobar{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);width:300px;height:14px;" +
+        "background:rgba(0,0,0,.35);border:2px solid rgba(255,255,255,.95);border-radius:999px;z-index:5;" +
+        "opacity:1;pointer-events:none;transition:filter .15s ease, transform .15s ease;display:none;}" +
+        "#nitrobar.active{transform:translateX(-50%) scale(1.02);filter:drop-shadow(0 0 12px rgba(0,229,255,.65))}" +
+        "#nitrofill{height:100%;width:0%;border-radius:999px;" +
+        "background:linear-gradient(90deg, rgba(0,229,255,1) 0%, rgba(57,255,136,1) 55%, rgba(255,255,255,1) 100%);" +
+        "box-shadow:0 0 8px rgba(0,229,255,.28);transition:width .08s linear}" +
+        "#nitrolabel{position:fixed;bottom:38px;left:50%;transform:translateX(-50%);" +
+        "font-family:'Press Start 2P',monospace;font-size:10px;color:rgba(255,255,255,.9);z-index:5;" +
+        "text-shadow:0 2px 0 rgba(0,0,0,.45);pointer-events:none;opacity:.85;display:none;}";
+      document.head.appendChild(ns);
+    }
+
+    if (!document.getElementById("nitrobar")) {
+      var nb = makeDiv("nitrobar", "", "");
+      var fill = makeDiv("nitrofill", "", "");
+      nb.appendChild(fill);
+      document.body.appendChild(nb);
+
+      var lbl = makeDiv("nitrolabel", "", "NITRO");
+      document.body.appendChild(lbl);
+    }
+  }
+
+  function syncNitroUiVisibility() {
+    ensureNitroUiOnce();
+    var barEl = document.getElementById("nitrobar");
+    var lblEl = document.getElementById("nitrolabel");
+    if (!barEl || !lblEl) return;
+
+    if (gameStarted && mode_enableNitro) {
+      barEl.style.display = "block";
+      lblEl.style.display = "block";
+    } else {
+      barEl.style.display = "none";
+      lblEl.style.display = "none";
+      barEl.classList.remove("active");
+      var fillEl = document.getElementById("nitrofill");
+      if (fillEl) fillEl.style.width = "0%";
+    }
+  }
+
+  function updateNitroUI() {
+    if (!mode_enableNitro) return;
+    var barEl = document.getElementById("nitrobar");
+    var fillEl = document.getElementById("nitrofill");
+    if (!barEl || !fillEl) return;
+
+    if (nitroActive) barEl.classList.add("active");
+    else barEl.classList.remove("active");
+
+    fillEl.style.width = ((nitroFuel / NITRO_MAX) * 100) + "%";
+  }
+
+  // =========================
   // ===== Engine init ========
   // =========================
-  var BASE_FOV = 90;
-  var BOOST_FOV = 100;
-
-  // ---- GLTF loader (SINGLE INSTANCE) ----
-  var gltfLoader = null;
-  var carGLTF = null;          // loaded gltf scene (raw)
-  var carGLTFReady = false;
-  var carGLTFLoading = false;
-  var carGLTFWaiters = [];     // callbacks waiting for load (scene or null on fail)
-
-  function ensureGLTFLoader() {
-    if (gltfLoader) return;
-    if (!GLTF_CAR_URL) return;
-    if (typeof THREE === "undefined") return;
-
-    if (typeof THREE.GLTFLoader === "undefined") {
-      console.warn("GLTFLoader not found. Include GLTFLoader.js");
-      return;
-    }
-
-    gltfLoader = new THREE.GLTFLoader();
-    gltfLoader.setPath("models/");
-  }
-
-  function preloadCarGLTF() {
-    if (!GLTF_CAR_URL) return;
-    ensureGLTFLoader();
-    if (!gltfLoader) return;
-
-    if (carGLTFReady || carGLTFLoading) return;
-    carGLTFLoading = true;
-
-    gltfLoader.load(
-      GLTF_CAR_URL,
-      function (g) {
-        carGLTFLoading = false;
-        carGLTFReady = true;
-        carGLTF = (g && g.scene) ? g.scene : null;
-
-        if (carGLTF) {
-          carGLTF.traverse(function (o) {
-            if (o && o.isMesh) {
-              o.castShadow = true;
-              o.receiveShadow = true;
-              if (o.material) o.material.needsUpdate = true;
-            }
-          });
-        }
-
-        var w = carGLTFWaiters.slice();
-        carGLTFWaiters.length = 0;
-        for (var i = 0; i < w.length; i++) w[i](carGLTF);
-      },
-      undefined,
-      function (err) {
-        console.warn("GLTF car load failed. Falling back to built-in car.", err);
-        carGLTFLoading = false;
-        carGLTFReady = false;
-        carGLTF = null;
-
-        var w2 = carGLTFWaiters.slice();
-        carGLTFWaiters.length = 0;
-        for (var j = 0; j < w2.length; j++) w2[j](null);
-      }
-    );
-  }
-
   function ensureEngine() {
-    if (scene && renderer && mapGroup && cpGroup && camera) return;
-
-    if (typeof THREE === "undefined") {
-      throw new Error("THREE is not loaded. Make sure three.js is included before script.js");
-    }
+    if (scene && renderer && camera && mapGroup && cpGroup) return;
 
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x7fb0ff);
@@ -461,10 +403,11 @@
     ground.receiveShadow = true;
     scene.add(ground);
 
-    camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 1, 2000);
-    camera.position.set(0, CAM_HEIGHT, 10);
+    camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 1, 6000);
+    camera.position.set(0, 4, 10);
     scene.add(camera);
 
+    // Lighting (kept stable; not tied to mode)
     var sun = new THREE.DirectionalLight(0xffffff, 0.75);
     sun.position.set(3000, 2000, -2000);
     sun.castShadow = true;
@@ -491,7 +434,6 @@
     sliderEl = document.getElementById("slider");
     settingsEl = document.getElementById("settings");
     toolbarEl = document.getElementById("toolbar");
-
     countdownEl = document.getElementById("countdown");
     lapEl = document.getElementById("lap");
 
@@ -516,40 +458,10 @@
       document.head.appendChild(st);
     }
 
-    // Nitro UI style
-    if (!document.getElementById("nitroStyle")) {
-      var ns = document.createElement("style");
-      ns.id = "nitroStyle";
-      ns.textContent =
-        "#nitrobar{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);width:300px;height:14px;" +
-        "background:rgba(0,0,0,.35);border:2px solid rgba(255,255,255,.95);border-radius:999px;z-index:5;" +
-        "opacity:1;pointer-events:none;transition:filter .15s ease, transform .15s ease;display:none;}" +
-        "#nitrobar.active{transform:translateX(-50%) scale(1.02);filter:drop-shadow(0 0 12px rgba(0,229,255,.65))}" +
-        "#nitrofill{height:100%;width:0%;border-radius:999px;" +
-        "background:linear-gradient(90deg, rgba(0,229,255,1) 0%, rgba(57,255,136,1) 55%, rgba(255,255,255,1) 100%);" +
-        "box-shadow:0 0 8px rgba(0,229,255,.28);transition:width .08s linear}" +
-        "#nitrolabel{position:fixed;bottom:38px;left:50%;transform:translateX(-50%);" +
-        "font-family:'Press Start 2P',monospace;font-size:10px;color:rgba(255,255,255,.9);z-index:5;" +
-        "text-shadow:0 2px 0 rgba(0,0,0,.45);pointer-events:none;opacity:.85;display:none;}";
-      document.head.appendChild(ns);
-    }
-
-    if (!document.getElementById("nitrobar")) {
-      var nb = makeDiv("nitrobar", "", "");
-      var fill = makeDiv("nitrofill", "", "");
-      nb.appendChild(fill);
-      document.body.appendChild(nb);
-
-      var lbl = makeDiv("nitrolabel", "", "NITRO");
-      document.body.appendChild(lbl);
-    }
-
     window.addEventListener("resize", onResize, false);
     window.addEventListener("orientationchange", onResize, false);
 
-    // Initialize loader once + preload once
-    ensureGLTFLoader();
-    preloadCarGLTF();
+    ensureNitroUiOnce();
   }
 
   function onResize() {
@@ -560,117 +472,32 @@
   }
 
   // =========================
-  // ===== Map build ==========
+  // ===== Map parse/build ====
   // =========================
-  function clearGroup(g) {
-    if (!g) return;
-    while (g.children.length) g.remove(g.children[0]);
+  var MIRROR_X = false;
+
+  function parseV2(tok) {
+    var parts = tok.split(",");
+    if (parts.length !== 2) return null;
+
+    var x = parseFloat(parts[0]);
+    var y = parseFloat(parts[1]);
+    if (!isFinite(x) || !isFinite(y)) return null;
+
+    if (MIRROR_X) x = -x;
+    return vec2(x, -y); // editor y -> game z (negated)
   }
 
-  function buildMapFromTrackCode(track) {
-    ensureEngine();
-
-    clearGroup(mapGroup);
-    clearGroup(cpGroup);
-    clearGroup(decoGroup);
-    wallSegs = [];
-    cpSegs = [];
-
-    track = (track || "").trim();
-    if (!track) {
-      spawnX = 0; spawnY = 0; spawnDir = 0;
-      return;
-    }
-
-    var parts = track.split("|");
-
-    // ===== SPAWN (5th section: parts[4]) =====
-    var hasSpawn = false;
-    var spawnText = (parts[4] || "").trim();
-    if (spawnText.length) {
-      var sp = spawnText.split("/");
-      var posTok = (sp[0] || "").trim();
-      var p = parseV2(posTok);
-      if (p) {
-        spawnX = p.x;
-        spawnY = p.y;
-        hasSpawn = true;
-      }
-
-      var deg = parseFloat(sp[1] || "0");
-      if (isFinite(deg)) {
-        if (MIRROR_X) deg = 180 - deg;
-
-        // Editor: 0°=+X, 90°=+Y. Game forward is (sin(dir), cos(dir)).
-        // Correct conversion:
-        spawnDir = deg * Math.PI / 180; // +90 more (right)
-
-        hasSpawn = true;
-      }
-
-      // small bias backward so you don't start inside checkpoint/wall
-      spawnX -= Math.sin(spawnDir) * 0.8;
-      spawnY -= Math.cos(spawnDir) * 0.8;
-    }
-
-    var wallsPart = (parts[0] || "").trim();
-    var checkPart = (parts[1] || "").trim();
-    var treesPart = (parts[2] || "").trim();
-
-    var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
-    function includePt(p2) {
-      minX = Math.min(minX, p2.x);
-      minY = Math.min(minY, p2.y);
-      maxX = Math.max(maxX, p2.x);
-      maxY = Math.max(maxY, p2.y);
-    }
-
-    // Walls
-    var wallTokens = wallsPart.split(/\s+/).filter(Boolean);
-    for (var i = 0; i < wallTokens.length; i++) {
-      var seg = parseSeg(wallTokens[i]);
-      if (!seg) continue;
-      includePt(seg.a); includePt(seg.b);
-      addWall(seg.a, seg.b);
-    }
-
-    // Checkpoints
-    var cpTokens = checkPart.split(/\s+/).filter(Boolean);
-    for (var j = 0; j < cpTokens.length; j++) {
-      var cseg = parseSeg(cpTokens[j]);
-      if (!cseg) continue;
-      includePt(cseg.a); includePt(cseg.b);
-      addCheckpoint(cseg.a, cseg.b, j === 0);
-    }
-
-    // Trees
-    var treeTokens = treesPart.split(/\s+/).filter(Boolean);
-    for (var t = 0; t < treeTokens.length; t++) {
-      var tp = parseV2(treeTokens[t]);
-      if (!tp) continue;
-      includePt(tp);
-      addTree(tp.x, tp.y);
-    }
-
-    // resize ground
-    if (minX < 1e8) {
-      var pad = 2000;
-      var w = (maxX - minX) + pad;
-      var h = (maxY - minY) + pad;
-      w = Math.max(w, 120);
-      h = Math.max(h, 120);
-
-      if (ground && ground.geometry) ground.geometry.dispose();
-      var ng = new THREE.PlaneGeometry(w, h);
-      ng.rotateX(-Math.PI / 2);
-      ground.geometry = ng;
-      ground.position.set((minX + maxX) / 2, 0, (minY + maxY) / 2);
-    } else {
-      ground.position.set(0, 0, 0);
-    }
-
-    if (!hasSpawn) computeSpawn();
+  function parseSeg(tok) {
+    var p = tok.split("/");
+    if (p.length !== 2) return null;
+    var a = parseV2(p[0]);
+    var b = parseV2(p[1]);
+    if (!a || !b) return null;
+    return { a: a, b: b };
   }
+
+  function clearGroup(g) { while (g && g.children && g.children.length) g.remove(g.children[0]); }
 
   function addWall(a2, b2) {
     var a = a2.clone(), b = b2.clone();
@@ -692,7 +519,6 @@
     mesh.position.set(mid.x, 1.5, mid.y);
 
     mapGroup.add(mesh);
-
     wallSegs.push({ a: a, b: b, dir: ab, len2: len2, mesh: mesh });
   }
 
@@ -719,7 +545,6 @@
     mesh.position.set(mid.x, 0.05, mid.y);
 
     cpGroup.add(mesh);
-
     cpSegs.push({ a: a, b: b, dir: ab, len2: len2, normal: n, mid: mid, mesh: mesh });
   }
 
@@ -766,6 +591,94 @@
     spawnDir = wrapAngle(spawnDir);
   }
 
+  function buildMapFromTrackCode(track) {
+    ensureEngine();
+
+    clearGroup(mapGroup);
+    clearGroup(cpGroup);
+    clearGroup(decoGroup);
+    wallSegs = [];
+    cpSegs = [];
+
+    track = String(track || "").trim();
+    if (!track) {
+      spawnX = 0; spawnY = 0; spawnDir = 0;
+      return;
+    }
+
+    var parts = track.split("|");
+
+    // SPAWN (parts[4])
+    var hasSpawn = false;
+    var spawnText = (parts[4] || "").trim();
+    if (spawnText.length) {
+      var sp = spawnText.split("/");
+      var posTok = (sp[0] || "").trim();
+      var p = parseV2(posTok);
+      if (p) { spawnX = p.x; spawnY = p.y; hasSpawn = true; }
+
+      var deg = parseFloat(sp[1] || "0");
+      if (isFinite(deg)) {
+        if (MIRROR_X) deg = 180 - deg;
+        // Editor deg assumed compatible with our old conversion
+        spawnDir = deg * Math.PI / 180;
+        hasSpawn = true;
+      }
+
+      // small bias backward so you don't start inside walls/checkpoint
+      spawnX -= Math.sin(spawnDir) * 0.8;
+      spawnY -= Math.cos(spawnDir) * 0.8;
+    }
+
+    var wallsPart = (parts[0] || "").trim();
+    var checkPart = (parts[1] || "").trim();
+    var treesPart = (parts[2] || "").trim();
+
+    var minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+    function includePt(p2) { minX = Math.min(minX, p2.x); minY = Math.min(minY, p2.y); maxX = Math.max(maxX, p2.x); maxY = Math.max(maxY, p2.y); }
+
+    var wallTokens = wallsPart.split(/\s+/).filter(Boolean);
+    for (var i = 0; i < wallTokens.length; i++) {
+      var seg = parseSeg(wallTokens[i]);
+      if (!seg) continue;
+      includePt(seg.a); includePt(seg.b);
+      addWall(seg.a, seg.b);
+    }
+
+    var cpTokens = checkPart.split(/\s+/).filter(Boolean);
+    for (var j = 0; j < cpTokens.length; j++) {
+      var cseg = parseSeg(cpTokens[j]);
+      if (!cseg) continue;
+      includePt(cseg.a); includePt(cseg.b);
+      addCheckpoint(cseg.a, cseg.b, j === 0);
+    }
+
+    var treeTokens = treesPart.split(/\s+/).filter(Boolean);
+    for (var t = 0; t < treeTokens.length; t++) {
+      var tp = parseV2(treeTokens[t]);
+      if (!tp) continue;
+      includePt(tp);
+      addTree(tp.x, tp.y);
+    }
+
+    // resize ground to map bounds
+    if (minX < 1e8) {
+      var pad = 2000;
+      var w = Math.max((maxX - minX) + pad, 120);
+      var h = Math.max((maxY - minY) + pad, 120);
+
+      if (ground && ground.geometry) ground.geometry.dispose();
+      var ng = new THREE.PlaneGeometry(w, h);
+      ng.rotateX(-Math.PI / 2);
+      ground.geometry = ng;
+      ground.position.set((minX + maxX) / 2, 0, (minY + maxY) / 2);
+    } else {
+      ground.position.set(0, 0, 0);
+    }
+
+    if (!hasSpawn) computeSpawn();
+  }
+
   // =========================
   // ===== Car models =========
   // =========================
@@ -797,12 +710,11 @@
 
     slip.add(lineMesh(-0.35));
     slip.add(lineMesh(0.35));
-
     root.add(slip);
   }
 
-  // ---- Built-in procedural F1 (has wheel indices 2/3 for steer animation) ----
-  function makeBuiltInCar(hexColor) {
+  // Built-in "original" car (used ALWAYS in ORIGINAL mode)
+  function makeBuiltInCar(hexColorInt) {
     var car = new THREE.Object3D();
     car.userData.isBuiltIn = true;
     car.userData.isGLTF = false;
@@ -810,7 +722,7 @@
     car.userData.halfW = CAR_HALF_WIDTH;
     car.userData.halfL = CAR_HALF_LENGTH;
 
-    var bodyMat = new THREE.MeshStandardMaterial({ color: hexColor, roughness: 0.5, metalness: 0.12 });
+    var bodyMat = new THREE.MeshStandardMaterial({ color: hexColorInt, roughness: 0.55, metalness: 0.12 });
     var carbonMat = new THREE.MeshStandardMaterial({ color: 0x0f0f10, roughness: 0.9, metalness: 0.05 });
     var darkMat = new THREE.MeshStandardMaterial({ color: 0x171717, roughness: 0.85, metalness: 0.05 });
     var metalMat = new THREE.MeshStandardMaterial({ color: 0x6b6b6b, roughness: 0.45, metalness: 0.5 });
@@ -857,17 +769,17 @@
     box(body, 1.55, 0.09, 0.42, carbonMat, 0, 0.22, -1.92);
     box(body, 1.35, 0.06, 0.28, darkMat, 0, 0.30, -1.98);
 
-    // slipstream fx on body
+    // Slipstream FX object exists but only used in MODERN mode
     attachSlipFX(body);
 
-    // cabin is child[1]
+    // cabin
     var cabin = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.20, 0.90), glassMat);
     cabin.castShadow = true;
     cabin.receiveShadow = true;
     cabin.position.set(0, 0.78, 0.25);
     car.add(cabin);
 
-    // wheels are child[2..5]
+    // wheels (children[2..5]) with front steer animation supported
     function wheelMesh(radius, thickness) {
       var g = new THREE.CylinderGeometry(radius, radius, thickness, 18);
       var m = new THREE.MeshStandardMaterial({ color: 0x0b0b0b, roughness: 1, metalness: 0.02 });
@@ -894,9 +806,9 @@
     }
 
     var FL = { x: -1.08, y: 0.36, z: 1.52 };
-    var FR = { x: 1.08, y: 0.36, z: 1.52 };
+    var FR = { x:  1.08, y: 0.36, z: 1.52 };
     var BL = { x: -1.08, y: 0.40, z: -1.32 };
-    var BR = { x: 1.08, y: 0.40, z: -1.32 };
+    var BR = { x:  1.08, y: 0.40, z: -1.32 };
 
     var frontLeft = wheelMesh(0.36, 0.30);
     frontLeft.position.set(FL.x, FL.y, FL.z);
@@ -917,145 +829,126 @@
     return car;
   }
 
-  function tintModel(root, hexColor) {
-    if (!root || !GLTF_TINT_ENABLED) return;
-    var c = new THREE.Color(hexColor);
-    root.traverse(function (o) {
-      if (!o || !o.isMesh) return;
-      var m = o.material;
-      if (!m) return;
+  // ---------------- GLTF (MODERN only) ----------------
+  var gltfLoader = null;
+  var carGLTF = null;
+  var carGLTFReady = false;
+  var carGLTFLoading = false;
+  var carGLTFWaiters = [];
 
-      // If material has a map, tinting often looks bad. Keep map look by skipping color override.
-      if (Array.isArray(m)) {
-        for (var i = 0; i < m.length; i++) {
-          if (!m[i]) continue;
-          if (m[i].map) continue;
-          if (m[i].color) m[i].color.copy(c);
-        }
-      } else {
-        if (m.map) return;
-        if (m.color) m.color.copy(c);
-      }
-    });
+  function ensureGLTFLoader() {
+    if (gltfLoader) return;
+    if (!GLTF_CAR_URL) return;
+    if (typeof THREE.GLTFLoader === "undefined") return;
+    gltfLoader = new THREE.GLTFLoader();
+    if (GLTF_PATH_PREFIX) gltfLoader.setPath(GLTF_PATH_PREFIX);
   }
 
-  // --- GLTF bbox sizing helpers (NEW) ---
-  function getBBoxSizeXZ(obj) {
-    // assumes obj already has desired scale applied
-    var savedPos = obj.position.clone();
-    var savedRot = obj.rotation.clone();
+  function preloadCarGLTF() {
+    if (!GLTF_CAR_URL) return;
+    ensureGLTFLoader();
+    if (!gltfLoader) return;
 
-    obj.position.set(0, 0, 0);
-    obj.rotation.set(0, 0, 0);
+    if (carGLTFReady || carGLTFLoading) return;
+    carGLTFLoading = true;
+
+    gltfLoader.load(
+      GLTF_CAR_URL,
+      function (g) {
+        carGLTFLoading = false;
+        carGLTFReady = true;
+        carGLTF = (g && g.scene) ? g.scene : null;
+
+        if (carGLTF) {
+          carGLTF.traverse(function (o) {
+            if (o && o.isMesh) {
+              o.castShadow = true;
+              o.receiveShadow = true;
+            }
+          });
+        }
+
+        var w = carGLTFWaiters.slice();
+        carGLTFWaiters.length = 0;
+        for (var i = 0; i < w.length; i++) w[i](carGLTF);
+      },
+      undefined,
+      function (err) {
+        console.warn("GLTF car load failed; built-in car will be used.", err);
+        carGLTFLoading = false;
+        carGLTFReady = false;
+        carGLTF = null;
+
+        var w2 = carGLTFWaiters.slice();
+        carGLTFWaiters.length = 0;
+        for (var j = 0; j < w2.length; j++) w2[j](null);
+      }
+    );
+  }
+
+  function getBBoxSize(obj) {
     obj.updateMatrixWorld(true);
-
     var box = new THREE.Box3().setFromObject(obj);
     var size = new THREE.Vector3();
     box.getSize(size);
-
-    obj.position.copy(savedPos);
-    obj.rotation.copy(savedRot);
-    obj.updateMatrixWorld(true);
-
-    return { size: size, box: box };
+    return { box: box, size: size };
   }
 
   function buildGLTFCarInstance(hexColorInt) {
     if (!carGLTFReady || !carGLTF) return null;
 
-    // clone raw gltf
     var raw = carGLTF.clone(true);
 
+    // Make GLTF bright/consistent
     raw.traverse(function (o) {
       if (!o || !o.isMesh) return;
-
       o.castShadow = false;
       o.receiveShadow = false;
 
-      if (!o.material) return;
+      // Convert to MeshBasic to avoid lighting issues (keeps textures)
+      var m = o.material;
+      if (!m) return;
 
-      function convert(mat) {
-        if (!mat) return;
-
-        o.material = new THREE.MeshBasicMaterial({
-          map: mat.map || null,
-          color: 0xffffff
-        });
-      }
-
-      if (Array.isArray(o.material)) {
-        o.material = o.material.map(function (m) {
+      if (Array.isArray(m)) {
+        o.material = m.map(function (mm) {
           return new THREE.MeshBasicMaterial({
-            map: m.map || null,
+            map: (mm && mm.map) ? mm.map : null,
             color: 0xffffff
           });
         });
       } else {
-        convert(o.material);
+        o.material = new THREE.MeshBasicMaterial({
+          map: m.map || null,
+          color: 0xffffff
+        });
       }
     });
 
-    // scale
-    var scale = GLTF_MANUAL_SCALE;
-    if (GLTF_AUTO_SCALE) {
-      // measure at unit scale
-      raw.scale.set(1, 1, 1);
-      raw.updateMatrixWorld(true);
-      var m0 = getBBoxSizeXZ(raw).size;
+    raw.scale.set(GLTF_MANUAL_SCALE, GLTF_MANUAL_SCALE, GLTF_MANUAL_SCALE);
+    raw.rotation.y = GLTF_YAW_OFFSET;
 
-      var len = Math.max(1e-6, m0.z);
-      var wid = Math.max(1e-6, m0.x);
+    // Ground it to y=0
+    raw.updateMatrixWorld(true);
+    var bb0 = new THREE.Box3().setFromObject(raw);
+    raw.position.y -= bb0.min.y;
+    raw.position.y += (GLTF_CAR_Y_OFFSET || 0);
 
-      // primary: match length, clamp a bit using width to prevent absurd results
-      var sLen = GLTF_TARGET_LENGTH / len;
-      var sWid = GLTF_TARGET_WIDTH / wid;
-
-      // choose length match, but keep within a reasonable range of width match
-      scale = sLen;
-      var minS = sWid * 0.55;
-      var maxS = sWid * 1.80;
-      scale = clamp(scale, minS, maxS);
-    }
-
-    raw.scale.set(scale, scale, scale * 0.65);
     raw.updateMatrixWorld(true);
 
-    // optional center to bbox
+    // Wrap
     var wrapper = new THREE.Group();
     wrapper.userData.isBuiltIn = false;
     wrapper.userData.isGLTF = true;
     wrapper.userData.yawOffset = GLTF_YAW_OFFSET;
 
-    if (GLTF_AUTO_CENTER) {
-      var bbox = new THREE.Box3().setFromObject(raw);
-      var center = new THREE.Vector3();
-      bbox.getCenter(center);
-      // move raw so its bbox center sits at wrapper origin
-      raw.position.sub(center);
-      raw.updateMatrixWorld(true);
-    }
-
-    // --- ground the model so its lowest point sits on y=0 ---
-    raw.updateMatrixWorld(true);
-    var bbY = new THREE.Box3().setFromObject(raw);
-    var minY = bbY.min.y;
-
-    // move model up/down so bbox bottom is at y=0, then apply small offset
-    raw.position.y -= minY;
-    raw.position.y += (GLTF_CAR_Y_OFFSET || 0);
-
-    raw.updateMatrixWorld(true);
-
-    // fit hitbox from raw only (NO slipfx included)
+    // Fit hitbox
     var halfW = CAR_HALF_WIDTH;
     var halfL = CAR_HALF_LENGTH;
 
     if (GLTF_AUTO_FIT_HITBOX) {
-      var s = getBBoxSizeXZ(raw).size;
+      var s = getBBoxSize(raw).size;
       halfW = (s.x * 0.5) * GLTF_HITBOX_SCALE + GLTF_HITBOX_PADDING;
       halfL = (s.z * 0.5) * GLTF_HITBOX_SCALE + GLTF_HITBOX_PADDING;
-
-      // keep sane minimums
       halfW = Math.max(0.25, halfW);
       halfL = Math.max(0.35, halfL);
     }
@@ -1063,15 +956,77 @@
     wrapper.userData.halfW = halfW;
     wrapper.userData.halfL = halfL;
 
-    // tint (optional)
-    tintModel(raw, hexColorInt);
-
     wrapper.add(raw);
 
-    // slip fx on wrapper so it follows car
+    // Slip FX exists for modern only
     attachSlipFX(wrapper);
 
     return wrapper;
+  }
+
+  function createCarModel(hexColorInt, playerKey, cb) {
+    ensureEngine();
+
+    // ORIGINAL mode always uses built-in car
+    if (mode_forceBuiltInCar || !GLTF_CAR_URL) {
+      var built = makeBuiltInCar(hexColorInt);
+      built.userData.playerKey = playerKey;
+      cb(built);
+      return;
+    }
+
+    // MODERN: use GLTF if available; fallback immediately + swap later
+    ensureGLTFLoader();
+    if (!gltfLoader) {
+      var built2 = makeBuiltInCar(hexColorInt);
+      built2.userData.playerKey = playerKey;
+      cb(built2);
+      return;
+    }
+
+    if (carGLTFReady && carGLTF) {
+      var model = buildGLTFCarInstance(hexColorInt);
+      if (!model) {
+        var built3 = makeBuiltInCar(hexColorInt);
+        built3.userData.playerKey = playerKey;
+        cb(built3);
+        return;
+      }
+      model.userData.playerKey = playerKey;
+      cb(model);
+      return;
+    }
+
+    var placeholder = makeBuiltInCar(hexColorInt);
+    placeholder.userData.playerKey = playerKey;
+    placeholder.userData.isPlaceholder = true;
+    cb(placeholder);
+
+    carGLTFWaiters.push(function (loaded) {
+      if (!loaded) return;
+      var p = players[playerKey];
+      if (!p || !p.model) return;
+      if (p.model.userData && p.model.userData.isGLTF) return;
+
+      var pos = p.model.position.clone();
+      var rotY = p.model.rotation.y;
+
+      var col = (p.data && p.data.color) ? p.data.color : "#ff3030";
+      var hex = parseInt(col.replace("#", "0x"), 16);
+
+      var newModel = buildGLTFCarInstance(hex);
+      if (!newModel) return;
+
+      newModel.position.copy(pos);
+      newModel.rotation.y = rotY;
+      scene.add(newModel);
+
+      scene.remove(p.model);
+      p.model = newModel;
+      syncPlayerHitboxFromModel(p);
+    });
+
+    preloadCarGLTF();
   }
 
   function syncPlayerHitboxFromModel(p) {
@@ -1080,78 +1035,6 @@
     var hl = (p.model.userData && p.model.userData.halfL) ? p.model.userData.halfL : CAR_HALF_LENGTH;
     p.halfW = hw;
     p.halfL = hl;
-  }
-
-  function swapPlayerModelToGLTF(playerKey) {
-    if (!carGLTFReady || !carGLTF) return;
-    var p = players[playerKey];
-    if (!p || !p.model) return;
-
-    // already gltf
-    if (p.model.userData && p.model.userData.isGLTF) return;
-
-    // preserve transform
-    var pos = p.model.position.clone();
-    var rotY = p.model.rotation.y;
-
-    // color -> hex
-    var col = (p.data && p.data.color) ? p.data.color : "#ff3030";
-    var hex = parseInt(col.replace("#", "0x"), 16);
-
-    var newModel = buildGLTFCarInstance(hex);
-    if (!newModel) return;
-
-    newModel.position.copy(pos);
-    newModel.rotation.y = rotY; // already includes yawOffset in rotY if we were applying it
-    scene.add(newModel);
-
-    scene.remove(p.model);
-    p.model = newModel;
-
-    syncPlayerHitboxFromModel(p);
-  }
-
-  // createCarModel now takes playerKey so swap-in can update the correct player (NEW)
-  function createCarModel(hexColorInt, playerKey, cb) {
-    ensureEngine();
-
-    // If no GLTF configured OR mode forces built-in, return built-in immediately
-    if (!GLTF_CAR_URL || FORCE_BUILTIN_CAR) {
-      var built = makeBuiltInCar(hexColorInt);
-      built.userData.playerKey = playerKey;
-      cb(built);
-      return;
-    }
-
-    // If GLTF already loaded, use it immediately
-    if (carGLTFReady && carGLTF) {
-      var model = buildGLTFCarInstance(hexColorInt);
-      if (!model) {
-        var built2 = makeBuiltInCar(hexColorInt);
-        built2.userData.playerKey = playerKey;
-        cb(built2);
-        return;
-      }
-      model.userData.playerKey = playerKey;
-      cb(model);
-      return;
-    }
-
-    // Otherwise: return built-in NOW (game never blocks),
-    // then swap to GLTF when it finishes loading.
-    var placeholder = makeBuiltInCar(hexColorInt);
-    placeholder.userData.playerKey = playerKey;
-    placeholder.userData.isPlaceholder = true;
-    cb(placeholder);
-
-    // Queue swap after GLTF loads
-    carGLTFWaiters.push(function (loaded) {
-      if (!loaded) return;
-      // if player still exists, swap
-      if (players[playerKey]) swapPlayerModelToGLTF(playerKey);
-    });
-
-    preloadCarGLTF();
   }
 
   // =========================
@@ -1181,7 +1064,6 @@
   function getSlipFX(model) {
     if (!model) return null;
     if (model._slipfxCached !== undefined) return model._slipfxCached;
-
     var fx = model.getObjectByName ? model.getObjectByName("slipfx") : null;
     model._slipfxCached = fx || null;
     return model._slipfxCached;
@@ -1195,7 +1077,6 @@
       fx.visible = false;
       return;
     }
-
     fx.visible = true;
 
     var pulse = 0.70 + 0.30 * Math.sin(ts * 0.02);
@@ -1211,11 +1092,11 @@
   }
 
   function computeSlipstreamForMe() {
-    var bestKey = null;
-    var best = 0;
-
+    if (!mode_enableSlipstream) return { key: null, factor: 0 };
     if (!me || !me.data) return { key: null, factor: 0 };
 
+    var bestKey = null;
+    var best = 0;
     var myPos = vec2(me.data.x, me.data.y);
 
     for (var k in players) {
@@ -1234,9 +1115,9 @@
       var dist = dVec.length();
       if (dist < 0.001 || dist > SLIP_DIST) continue;
 
-      var fwd = vec2(Math.sin(od), Math.cos(od)); // their forward
-      var along = dVec.dot(fwd);                  // + means I'm in front of them
-      if (along > -0.25) continue;                // must be behind them
+      var fwd = vec2(Math.sin(od), Math.cos(od));
+      var along = dVec.dot(fwd);
+      if (along > -0.25) continue;
 
       var proj = fwd.clone().multiplyScalar(along);
       var lateral = dVec.clone().sub(proj).length();
@@ -1244,31 +1125,36 @@
 
       var distFactor = clamp((SLIP_DIST - dist) / SLIP_DIST, 0, 1);
       var latFactor = clamp((SLIP_WIDTH - lateral) / SLIP_WIDTH, 0, 1);
-
       var factor = distFactor * (latFactor * latFactor);
 
-      if (factor > best) {
-        best = factor;
-        bestKey = k;
-      }
+      if (factor > best) { best = factor; bestKey = k; }
     }
 
     return { key: bestKey, factor: best };
   }
 
   function updateSlipstreamVisuals(ts) {
-    for (var k in players) {
-      if (!players.hasOwnProperty(k)) continue;
-      var p = players[k];
-      if (!p || !p.model) continue;
+    if (!mode_enableSlipstream) {
+      for (var k in players) {
+        if (!players.hasOwnProperty(k)) continue;
+        var p = players[k];
+        if (p && p.model) setSlipFX(p.model, 0, ts);
+      }
+      return;
+    }
 
-      if (k === slipTargetKey) setSlipFX(p.model, slipFactor, ts);
-      else setSlipFX(p.model, 0, ts);
+    for (var k2 in players) {
+      if (!players.hasOwnProperty(k2)) continue;
+      var p2 = players[k2];
+      if (!p2 || !p2.model) continue;
+
+      if (k2 === slipTargetKey) setSlipFX(p2.model, slipFactor, ts);
+      else setSlipFX(p2.model, 0, ts);
     }
   }
 
   // =========================
-  // ===== Input =============
+  // ===== Inputs =============
   // =========================
   function setupInputOnce() {
     if (setupInputOnce._did) return;
@@ -1282,10 +1168,11 @@
       if (k === "ArrowDown" || k === "s" || k === "S") down = true;
 
       if (k === "Shift") {
-        if (!nitro) {
+        if (!mode_enableNitro) return;
+        if (!nitroHeld) {
           if (!nitroLock && nitroFuel > 0.5) nitroArmed = true;
         }
-        nitro = true;
+        nitroHeld = true;
       }
     });
 
@@ -1297,13 +1184,14 @@
       if (k === "ArrowDown" || k === "s" || k === "S") down = false;
 
       if (k === "Shift") {
-        nitro = false;
+        nitroHeld = false;
         nitroArmed = false;
         nitroLock = false;
         nitroActive = false;
       }
     });
 
+    // Simple touch: left/right on halves; up if top half
     function updateTouch(touches) {
       left = right = up = down = false;
       if (!touches || touches.length === 0) return;
@@ -1365,7 +1253,6 @@
     requestAnimationFrame(function () { setSliderFrom01(0.02); });
 
     var dragging = false;
-
     function setFromEvent(e) {
       var rect = pickerEl.getBoundingClientRect();
       var cx = (e.touches && e.touches[0]) ? e.touches[0].clientX : e.clientX;
@@ -1383,99 +1270,7 @@
   }
 
   // =========================
-  // ===== Menu + flow ========
-  // =========================
-  function animateMenuIn() {
-    if (titleEl) setTimeout(function () { titleEl.style.transform = "translate3d(0, 0, 0)"; }, 10);
-    var items = document.getElementsByClassName("menuitem");
-    for (var i = 0; i < items.length; i++) {
-      (function (idx) {
-        setTimeout(function () { items[idx].style.transform = "translate3d(0, 0, 0)"; }, 120 + idx * 90);
-      })(i);
-    }
-    if (settingsEl) setTimeout(function () { settingsEl.style.transform = "translate3d(0, 0, 0)"; }, 500);
-  }
-
-  // NEW: Mode select -> Host/Join/Solo
-  function showModeMenu() {
-    ensureEngine();
-    setupInputOnce();
-    setupColorPickerOnce();
-
-    clearModeUI();
-    hideLobbyUI();
-
-    if (nameEl && !nameEl.value.trim()) nameEl.value = "Player";
-
-    if (titleEl) {
-      titleEl.style.display = "";
-      titleEl.innerHTML = "";
-    }
-
-    modeWrapEl = document.createElement("div");
-    modeWrapEl.id = "modewrap";
-    if (foreEl) foreEl.appendChild(modeWrapEl);
-
-    var info = makeDiv(null, "info", "Choose game mode");
-    info.style.position = "absolute";
-    info.style.top = "10vh";
-    info.style.left = "0";
-    info.style.width = "100%";
-    info.style.textAlign = "center";
-    modeWrapEl.appendChild(info);
-
-    function mkButton(text, topVh, onClick) {
-      var b = makeDiv(null, "button", text);
-      b.style.top = "calc(" + topVh + "vh - 8vmin)";
-      b.onclick = onClick;
-      modeWrapEl.appendChild(b);
-      setTimeout(function () { b.style.transform = "translate3d(0,0,0)"; }, 20);
-      return b;
-    }
-
-    mkButton("MODERN MODE", 40, function () {
-      applyModeLocally(MODES.MODERN);
-      showHostJoinMenu();
-    });
-
-    mkButton("ORIGINAL MODE", 70, function () {
-      applyModeLocally(MODES.ORIGINAL);
-      showHostJoinMenu();
-    });
-  }
-
-  function showHostJoinMenu() {
-    clearModeUI();
-
-    modeWrapEl = document.createElement("div");
-    modeWrapEl.id = "modewrap";
-    if (foreEl) foreEl.appendChild(modeWrapEl);
-
-    var info = makeDiv(null, "info", "Mode: <b>" + String(selectedMode || "").toUpperCase() + "</b>");
-    info.style.position = "absolute";
-    info.style.top = "10vh";
-    info.style.left = "0";
-    info.style.width = "100%";
-    info.style.textAlign = "center";
-    modeWrapEl.appendChild(info);
-
-    function mkButton(text, topVh, onClick) {
-      var b = makeDiv(null, "button", text);
-      b.style.top = "calc(" + topVh + "vh - 8vmin)";
-      b.onclick = onClick;
-      modeWrapEl.appendChild(b);
-      setTimeout(function () { b.style.transform = "translate3d(0,0,0)"; }, 20);
-      return b;
-    }
-
-    mkButton("BACK", 22, function () { showModeMenu(); });
-    mkButton("HOST", 40, function () { hostFlow(); });
-    mkButton("JOIN", 60, function () { joinFlow(); });
-    mkButton("SOLO", 80, function () { soloFlow(); });
-  }
-
-  // =========================
-  // ===== Toolbar tools ======
+  // ===== Toolbar ============
   // =========================
   function setupToolbarOnce() {
     if (setupToolbarOnce._did) return;
@@ -1504,34 +1299,116 @@
       window.open("./editor/", "_blank");
     });
 
-    toolButton("Import map code", "#db6262", function () {
-      var cur = getTrackCode();
-      var str = prompt("Paste trackcode here (exported from /editor).", cur);
+    toolButton("Import modern map", "#db6262", function () {
+      var cur = modernMapCode || "";
+      var str = prompt("Paste MODERN map code here (exported from /editor).", cur);
       if (typeof str === "string" && str.trim()) {
-        setTrackCode(str);
-        showOverlayMsg("Map imported.");
-        setTimeout(function () { showOverlayMsg(""); }, 1200);
+        modernMapCode = str.trim();
+        if (!mode_lockToOriginalMap) {
+          setTrackCode(modernMapCode);
+          buildMapFromTrackCode(modernMapCode);
+          showOverlayMsg("Modern map imported.");
+          setTimeout(function () { showOverlayMsg(""); }, 1200);
+        } else {
+          showOverlayMsg("Saved as MODERN map. Switch to MODERN mode to use it.");
+          setTimeout(function () { showOverlayMsg(""); }, 1400);
+        }
       }
     });
 
-    toolButton("Export map code", "#9a55db", function () {
-      var str = getTrackCode();
+    toolButton("Export current map", "#9a55db", function () {
+      var str = mode_lockToOriginalMap ? originalMapCode : modernMapCode;
       if (!str) return;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(str).then(function () {
           showOverlayMsg("Map code copied to clipboard.");
           setTimeout(function () { showOverlayMsg(""); }, 1200);
         }).catch(function () {
-          prompt("Copy trackcode:", str);
+          prompt("Copy map code:", str);
         });
       } else {
-        prompt("Copy trackcode:", str);
+        prompt("Copy map code:", str);
       }
     });
   }
 
   // =========================
-  // ===== Multiplayer ========
+  // ===== Menus/Flow =========
+  // =========================
+  function showModeMenu() {
+    ensureEngine();
+    setupInputOnce();
+    setupColorPickerOnce();
+
+    clearModeUI();
+    hideLobbyUI();
+
+    modeWrapEl = document.createElement("div");
+    modeWrapEl.id = "modewrap";
+    if (foreEl) foreEl.appendChild(modeWrapEl);
+
+    var info = makeDiv(null, "info", "Choose mode");
+    info.style.position = "absolute";
+    info.style.top = "10vh";
+    info.style.left = "0";
+    info.style.width = "100%";
+    info.style.textAlign = "center";
+    modeWrapEl.appendChild(info);
+
+    function mkButton(text, topVh, onClick) {
+      var b = makeDiv(null, "button", text);
+      b.style.top = "calc(" + topVh + "vh - 8vmin)";
+      b.onclick = onClick;
+      modeWrapEl.appendChild(b);
+      setTimeout(function () { b.style.transform = "translate3d(0,0,0)"; }, 20);
+      return b;
+    }
+
+    mkButton("ORIGINAL MODE", 40, function () {
+      applyModeLocally(MODES.ORIGINAL);
+      showHostJoinMenu();
+    });
+
+    mkButton("MODERN MODE", 70, function () {
+      applyModeLocally(MODES.MODERN);
+      // GLTF only relevant in modern
+      preloadCarGLTF();
+      showHostJoinMenu();
+    });
+  }
+
+  function showHostJoinMenu() {
+    clearModeUI();
+
+    modeWrapEl = document.createElement("div");
+    modeWrapEl.id = "modewrap";
+    if (foreEl) foreEl.appendChild(modeWrapEl);
+
+    var info = makeDiv(null, "info", "Mode: <b>" + String(selectedMode).toUpperCase() + "</b>");
+    info.style.position = "absolute";
+    info.style.top = "10vh";
+    info.style.left = "0";
+    info.style.width = "100%";
+    info.style.textAlign = "center";
+    modeWrapEl.appendChild(info);
+
+    function mkButton(text, topVh, onClick) {
+      var b = makeDiv(null, "button", text);
+      b.style.top = "calc(" + topVh + "vh - 8vmin)";
+      b.onclick = onClick;
+      modeWrapEl.appendChild(b);
+      setTimeout(function () { b.style.transform = "translate3d(0,0,0)"; }, 20);
+      return b;
+    }
+
+    mkButton("BACK", 22, function () { showModeMenu(); });
+    mkButton("HOST", 40, function () { hostFlow(); });
+    mkButton("JOIN", 60, function () { joinFlow(); });
+    mkButton("SOLO", 80, function () { soloFlow(); });
+  }
+
+  // =========================
+  // ===== Multiplayer =========
   // =========================
   function randomCode(len) {
     var s = "";
@@ -1544,7 +1421,9 @@
     try {
       if (playersRef) playersRef.off();
       if (startRef) startRef.off();
-    } catch (e) { }
+      if (modeRef) modeRef.off();
+      if (mapRef) mapRef.off();
+    } catch (e) {}
   }
 
   function clearPlayers() {
@@ -1559,15 +1438,14 @@
     me = null;
   }
 
-  // NEW: host sets room mode, join reads it
-  function connectToRoom(code, hostFlag, hostMode) {
-    if (meKey) return; // prevents multiple cars spawning
+  function connectToRoom(code, hostFlag) {
+    if (meKey) return;
     ensureEngine();
 
     detachRoomListeners();
     clearPlayers();
 
-    ROOM = (code || "").toUpperCase();
+    ROOM = String(code || "").toUpperCase();
     isHost = !!hostFlag;
 
     if (!database) {
@@ -1578,30 +1456,39 @@
     }
 
     roomRef = database.ref("rooms/" + ROOM);
+    playersRef = roomRef.child("players");
+    startRef = roomRef.child("startedAt");
+    modeRef = roomRef.child("mode");
+    mapRef = roomRef.child("mapCode");
 
     function startRoomWiring() {
-      playersRef = roomRef.child("players");
-      startRef = roomRef.child("startedAt");
+      // Live updates of room mode + map
+      modeRef.on("value", function (snap) {
+        var m = snap.val();
+        if (m === MODES.ORIGINAL || m === MODES.MODERN) {
+          applyModeLocally(m);
+          if (m === MODES.MODERN) preloadCarGLTF();
+        }
+      });
+
+      mapRef.on("value", function (snap) {
+        var mc = snap.val();
+        if (typeof mc === "string") {
+          // Keep two independent tracks
+          if (selectedMode === MODES.ORIGINAL) {
+            originalMapCode = mc || originalMapCode;
+          } else {
+            modernMapCode = mc || modernMapCode;
+          }
+          syncMapToMode();
+        }
+      });
 
       createLocalPlayerFirebase();
 
-      playersRef.on("child_added", function (snap) {
-        var key = snap.key;
-        var data = snap.val();
-        if (!data) return;
-        upsertPlayer(key, data);
-      });
-
-      playersRef.on("child_changed", function (snap) {
-        var key = snap.key;
-        var data = snap.val();
-        if (!data) return;
-        upsertPlayer(key, data);
-      });
-
-      playersRef.on("child_removed", function (snap) {
-        removePlayer(snap.key);
-      });
+      playersRef.on("child_added", function (snap) { upsertPlayer(snap.key, snap.val()); });
+      playersRef.on("child_changed", function (snap) { upsertPlayer(snap.key, snap.val()); });
+      playersRef.on("child_removed", function (snap) { removePlayer(snap.key); });
 
       startRef.on("value", function (snap) {
         var startedAt = snap.val();
@@ -1620,25 +1507,18 @@
     }
 
     if (isHost) {
-      applyModeLocally(hostMode || selectedMode || MODES.ORIGINAL);
+      // Host pushes authoritative mode + map
       roomRef.child("mode").set(selectedMode);
+      roomRef.child("mapCode").set(mode_lockToOriginalMap ? originalMapCode : modernMapCode);
       startRoomWiring();
     } else {
-      roomRef.child("mode").once("value").then(function (snap) {
-        var m = snap.val();
-        if (m === MODES.MODERN || m === MODES.ORIGINAL) applyModeLocally(m);
-        else applyModeLocally(MODES.ORIGINAL);
-        startRoomWiring();
-      }).catch(function () {
-        applyModeLocally(MODES.ORIGINAL);
-        startRoomWiring();
-      });
+      // Joiner just listens
+      startRoomWiring();
     }
   }
 
   function createLocalPlayerFirebase() {
     var nm = (nameEl && nameEl.value ? nameEl.value : "Player").trim() || "Player";
-
     var ref = playersRef.push();
     meKey = ref.key;
 
@@ -1660,7 +1540,6 @@
 
     createCarModel(hex, meKey, function (model) {
       model.position.set(data.x, 0, data.y);
-      // apply visual yaw offset without changing physics
       var yawOff = (model.userData && model.userData.yawOffset) ? model.userData.yawOffset : 0;
       model.rotation.y = data.dir + yawOff;
       scene.add(model);
@@ -1669,7 +1548,6 @@
 
       me = { key: meKey, ref: ref, data: data, model: model, label: label, isMe: true, lastSend: 0, halfW: CAR_HALF_WIDTH, halfL: CAR_HALF_LENGTH };
       players[meKey] = me;
-
       syncPlayerHitboxFromModel(me);
 
       ref.onDisconnect().remove();
@@ -1689,8 +1567,7 @@
 
     var p = players[key];
     if (!p) {
-      var hex = parseInt(((data.color || "#ff3030").replace("#", "0x")), 16);
-
+      var hex = parseInt(String(data.color || "#ff3030").replace("#", "0x"), 16);
       createCarModel(hex, key, function (model) {
         model.position.set(data.x || 0, 0, data.y || 0);
         var yawOff = (model.userData && model.userData.yawOffset) ? model.userData.yawOffset : 0;
@@ -1700,7 +1577,6 @@
         var label = makeLabel(data.name || "Player");
         p = { key: key, ref: playersRef.child(key), data: data, model: model, label: label, isMe: false, halfW: CAR_HALF_WIDTH, halfL: CAR_HALF_LENGTH };
         players[key] = p;
-
         syncPlayerHitboxFromModel(p);
       });
     } else {
@@ -1717,7 +1593,7 @@
     delete players[key];
   }
 
-  // ====== Start/Host/Join/Solo flows ======
+  // ===== Host/Join/Solo flows =====
   function hostFlow() {
     clearModeUI();
     var code = randomCode(4);
@@ -1746,7 +1622,7 @@
       roomRef.child("startedAt").set(firebase.database.ServerValue.TIMESTAMP);
     };
 
-    connectToRoom(code, true, selectedMode);
+    connectToRoom(code, true);
   }
 
   function joinFlow() {
@@ -1759,7 +1635,6 @@
     inEl.autocomplete = "off";
     inEl.spellcheck = false;
     inEl.value = "";
-
     if (foreEl) foreEl.appendChild(inEl);
     inEl.focus();
 
@@ -1774,7 +1649,7 @@
     document.body.appendChild(joinBtn);
 
     function doJoin() {
-      var code = (inEl.value || "").trim().toUpperCase();
+      var code = String(inEl.value || "").trim().toUpperCase();
       if (!code) return;
       connectToRoom(code, false);
     }
@@ -1787,13 +1662,12 @@
   function soloFlow() {
     ensureEngine();
 
-    // use the selected mode locally
-    applyModeLocally(selectedMode);
-
     clearPlayers();
     detachRoomListeners();
     ROOM = null;
     isHost = false;
+
+    syncMapToMode();
 
     var nm = (nameEl && nameEl.value ? nameEl.value : "Player").trim() || "Player";
     meKey = "solo";
@@ -1823,7 +1697,6 @@
 
       me = { key: meKey, ref: null, data: data, model: model, label: label, isMe: true, lastSend: 0, halfW: CAR_HALF_WIDTH, halfL: CAR_HALF_LENGTH };
       players[meKey] = me;
-
       syncPlayerHitboxFromModel(me);
 
       startGame();
@@ -1836,18 +1709,25 @@
     gameStarted = true;
     playerCollisionEnabled = false;
 
-    hideAllMenusForGameplay();
+    // Reset nitro state hard (especially for ORIGINAL)
+    nitroHeld = false;
+    nitroArmed = false;
+    nitroLock = false;
+    nitroActive = false;
+    nitroFuel = NITRO_MAX;
 
+    hideAllMenusForGameplay();
     safeRemove(document.getElementById("incode"));
     safeRemove(document.getElementById("startgame"));
 
     showOverlayMsg("");
-    startCountdown(function () { });
+    syncNitroUiVisibility();
+    startCountdown();
 
     setTimeout(function () { playerCollisionEnabled = true; }, 5000);
   }
 
-  function startCountdown(done) {
+  function startCountdown() {
     gameSortaStarted = true;
     var t = 3;
 
@@ -1866,7 +1746,6 @@
           countdownEl.style.display = "none";
         }
         gameSortaStarted = false;
-        if (done) done();
         return;
       }
       if (countdownEl) {
@@ -1877,7 +1756,7 @@
   }
 
   // =========================
-  // ===== Collision helpers ==
+  // ===== Collision math =====
   // =========================
   function axesFromDir(dir) {
     var fwd = vec2(Math.sin(dir), Math.cos(dir));
@@ -1933,9 +1812,7 @@
       clip(dx, hx - a.x) &&
       clip(-dy, a.y + hy) &&
       clip(dy, hy - a.y)
-    ) {
-      return t0 <= t1;
-    }
+    ) return t0 <= t1;
     return false;
   }
 
@@ -1965,6 +1842,7 @@
       bestDist = da;
       bestN = n;
     }
+
     var db = pointRectDist(b);
     if (db < bestDist) {
       var cb = pointRectClosest(b, hx, hy);
@@ -1974,12 +1852,7 @@
       bestN = n2;
     }
 
-    var corners = [
-      vec2(-hx, -hy),
-      vec2(-hx, hy),
-      vec2(hx, -hy),
-      vec2(hx, hy)
-    ];
+    var corners = [vec2(-hx, -hy), vec2(-hx, hy), vec2(hx, -hy), vec2(hx, hy)];
     for (var i = 0; i < corners.length; i++) {
       var c = corners[i];
       var r = pointSegDistSq(c, a, b);
@@ -2000,7 +1873,6 @@
     var bAxes = axesFromDir(bDir);
 
     var axes = [aAxes.right, aAxes.fwd, bAxes.right, bAxes.fwd];
-
     var bestOverlap = 1e9;
     var bestAxis = null;
 
@@ -2014,13 +1886,8 @@
 
       var dist = Math.abs(d.dot(axis));
 
-      var ra =
-        Math.abs(axis.dot(aAxes.right)) * aHx +
-        Math.abs(axis.dot(aAxes.fwd)) * aHy;
-
-      var rb =
-        Math.abs(axis.dot(bAxes.right)) * bHx +
-        Math.abs(axis.dot(bAxes.fwd)) * bHy;
+      var ra = Math.abs(axis.dot(aAxes.right)) * aHx + Math.abs(axis.dot(aAxes.fwd)) * aHy;
+      var rb = Math.abs(axis.dot(bAxes.right)) * bHx + Math.abs(axis.dot(bAxes.fwd)) * bHy;
 
       var overlap = (ra + rb) - dist;
       if (overlap <= 0) return { hit: false };
@@ -2066,6 +1933,7 @@
       if (n.lengthSq() > 1e-9) n.normalize();
       if (v.dot(n) < 0) v = reflect2(v, n).multiplyScalar(BOUNCE);
 
+      // light push for remote (visual sync stays stable)
       p.data.x += n.x * 0.06;
       p.data.y += n.y * 0.06;
       p.data.xv = (p.data.xv || 0) + n.x * 0.05;
@@ -2086,18 +1954,15 @@
 
     var pWorld = vec2(me.data.x, me.data.y);
     var vWorld = vec2(me.data.xv, me.data.yv);
-
     var axes = axesFromDir(me.data.dir);
 
     for (var pass = 0; pass < 3; pass++) {
       for (var i = 0; i < wallSegs.length; i++) {
         var w = wallSegs[i];
-
         var aL = worldToLocal(w.a, pWorld, axes);
         var bL = worldToLocal(w.b, pWorld, axes);
 
         var res = segRectDistanceLocal(aL, bL, hx, hy);
-
         if (res.dist < WALL_SIZE) {
           var nL = res.n.clone();
           if (nL.lengthSq() < 1e-9) continue;
@@ -2108,10 +1973,7 @@
           pWorld.add(pushWorld);
 
           var nW = pushWorld.clone().normalize();
-
-          if (vWorld.dot(nW) < 0) {
-            vWorld = reflect2(vWorld, nW).multiplyScalar(BOUNCE);
-          }
+          if (vWorld.dot(nW) < 0) vWorld = reflect2(vWorld, nW).multiplyScalar(BOUNCE);
         }
       }
     }
@@ -2133,7 +1995,6 @@
 
     for (var i = 0; i < cpSegs.length; i++) {
       var cp = cpSegs[i];
-
       var ab = cp.b.clone().sub(cp.a);
       var t = 0;
       if (cp.len2 > 1e-9) t = clamp(pos.clone().sub(cp.a).dot(ab) / cp.len2, 0, 1);
@@ -2156,8 +2017,7 @@
       gameSortaStarted = true;
       countdownEl.style.display = "block";
       countdownEl.style.fontSize = "18vmin";
-      countdownEl.innerHTML =
-        (me.data.name || "Player").replace(/</g, "&lt;") + "<br>WINS!";
+      countdownEl.innerHTML = String(me.data.name || "Player").replace(/</g, "&lt;") + "<br>WINS!";
 
       me.data.xv = 0;
       me.data.yv = 0;
@@ -2165,201 +2025,79 @@
   }
 
   // =========================
-  // ===== Physics + loop =====
+  // ===== Physics/update =====
   // =========================
   function updateMePhysics(warp, dtSec) {
     if (!me || !me.data || !me.model) return;
 
-    // Slipstream compute
+    // Slipstream compute (MODERN only)
     var slip = computeSlipstreamForMe();
     slipTargetKey = slip.key;
     slipFactor = slip.factor;
 
     // Steering (reverse behavior)
-    if (!mobile) {
-      if (left) me.data.steer = STEER_MAX;
-      if (right) me.data.steer = -STEER_MAX;
-      if (!(left ^ right)) me.data.steer = 0;
-    }
+    if (left) me.data.steer = STEER_MAX;
+    if (right) me.data.steer = -STEER_MAX;
+    if (!(left ^ right)) me.data.steer = 0;
     me.data.steer = clamp(me.data.steer, -STEER_MAX, STEER_MAX);
 
-    // Nitro state
+    // Nitro (MODERN only)
     nitroActive = false;
-    if (nitro && nitroArmed && !nitroLock && nitroFuel > 0) {
-      nitroActive = true;
-      nitroFuel -= NITRO_DRAIN * dtSec;
-
-      if (nitroFuel <= 0) {
-        nitroFuel = 0;
-        nitroLock = true;
-        nitroArmed = false;
-        nitroActive = false;
-      }
-    } else {
-      nitroFuel = Math.min(NITRO_MAX, nitroFuel + NITRO_REGEN * dtSec);
-    }
-
-    // =========================
-    // ===== ORIGINAL (CLASSIC) PHYSICS PATH =====
-    // (LEFT UNCHANGED)
-    // =========================
-    if (USE_CLASSIC_PHYSICS) {
-      var usingNitro = nitroActive;
-
-      // understeer scaling with speed
-      var sp0 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-      var steerScale = 1 / (1 + sp0 * TURN_SPEED_FALLOFF);
-
-      // turn
-      me.data.dir += (me.data.steer / CLASSIC_TURN_DIV) * warp * steerScale;
-      me.data.dir = wrapAngle(me.data.dir);
-
-      // throttle
-      var forwardOn = up;
-      var accel = SPEED;
-
-      if (usingNitro) accel *= NITRO_MULT;
-      if (slipFactor > 0.001) accel *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
-
-      if (forwardOn) {
-        me.data.xv += Math.sin(me.data.dir) * accel * warp;
-        me.data.yv += Math.cos(me.data.dir) * accel * warp;
-      }
-
-      if (down) {
-        me.data.xv -= Math.sin(me.data.dir) * accel * 2.3 * warp;
-        me.data.yv -= Math.cos(me.data.dir) * accel * 2.3 * warp;
-      }
-
-      // drag
-      var dragPow = Math.pow(CLASSIC_DRAG, warp);
-      me.data.xv *= dragPow;
-      me.data.yv *= dragPow;
-
-      // drift model: velocity direction lags heading
-      var vx = me.data.xv, vy = me.data.yv;
-      var sp = Math.sqrt(vx * vx + vy * vy);
-
-      if (sp > 1e-6) {
-        var velAng = Math.atan2(vx, vy);
-        var fwdAng = me.data.dir;
-        var diff = wrapAngle(fwdAng - velAng);
-
-        var grip = DRIFT_ALIGN_BASE / (1 + sp * DRIFT_ALIGN_SPEED_FALLOFF);
-        if (Math.abs(me.data.steer) > 0.001) grip *= DRIFT_ALIGN_TURN_MULT;
-        if (usingNitro) grip *= DRIFT_ALIGN_NITRO_MULT;
-
-        var align = clamp(grip * dtSec * 60, 0, 1);
-        velAng += diff * align;
-
-        vx = Math.sin(velAng) * sp;
-        vy = Math.cos(velAng) * sp;
-
-        var fwd = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
-        var side = vec2(fwd.y, -fwd.x);
-
-        var vf = vx * fwd.x + vy * fwd.y;
-        var vl = vx * side.x + vy * side.y;
-
-        var scrub = SIDE_SCRUB;
-        if (Math.abs(me.data.steer) > 0.001) scrub *= SIDE_SCRUB_TURN_MULT;
-        if (usingNitro) scrub *= SIDE_SCRUB_NITRO_MULT;
-
-        vl *= Math.pow(1 - scrub, warp);
-
-        vx = fwd.x * vf + side.x * vl;
-        vy = fwd.y * vf + side.y * vl;
-
-        me.data.xv = vx;
-        me.data.yv = vy;
-      }
-
-      // speed cap
-      var cap = CLASSIC_MAX_SPEED;
-      if (usingNitro) cap *= 1.6;
-      if (slipFactor > 0.001) cap *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
-
-      var sp2 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-      if (sp2 > cap && sp2 > 1e-9) {
-        var sc = cap / sp2;
-        me.data.xv *= sc;
-        me.data.yv *= sc;
-      }
-    }
-    // =========================
-    // ===== MODERN PHYSICS PATH =====
-    // (separate from OG; does not change OG tuning)
-    // =========================
-    else {
-      var usingNitro2 = nitroActive;
-
-      // understeer scaling with speed
-      var spM = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-      var steerScaleM = 1 / (1 + spM * TURN_SPEED_FALLOFF);
-
-      // turn
-      me.data.dir += (me.data.steer / MODERN_TURN_DIV) * warp * steerScaleM;
-      me.data.dir = wrapAngle(me.data.dir);
-
-      // throttle
-      var accelM = SPEED;
-      if (usingNitro2) accelM *= NITRO_MULT;
-      if (slipFactor > 0.001) accelM *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
-
-      if (up) {
-        me.data.xv += Math.sin(me.data.dir) * accelM * warp;
-        me.data.yv += Math.cos(me.data.dir) * accelM * warp;
-      }
-      if (down) {
-        me.data.xv -= Math.sin(me.data.dir) * accelM * MODERN_BRAKE_MULT * warp;
-        me.data.yv -= Math.cos(me.data.dir) * accelM * MODERN_BRAKE_MULT * warp;
-      }
-
-      // drag
-      var dragM = Math.pow(MODERN_DRAG, warp);
-      me.data.xv *= dragM;
-      me.data.yv *= dragM;
-
-      // align velocity to heading (tighter than OG drift)
-      var vxM = me.data.xv, vyM = me.data.yv;
-      var spV = Math.sqrt(vxM * vxM + vyM * vyM);
-
-      if (spV > 1e-6) {
-        var velAngM = Math.atan2(vxM, vyM);
-        var diffM = wrapAngle(me.data.dir - velAngM);
-
-        var alignM = clamp(MODERN_ALIGN_RATE * dtSec * 60, 0, 1);
-        velAngM += diffM * alignM;
-
-        vxM = Math.sin(velAngM) * spV;
-        vyM = Math.cos(velAngM) * spV;
-
-        // reduce sideways faster
-        var fwdM = vec2(Math.sin(me.data.dir), Math.cos(me.data.dir));
-        var sideM = vec2(fwdM.y, -fwdM.x);
-        var vfM = vxM * fwdM.x + vyM * fwdM.y;
-        var vlM = vxM * sideM.x + vyM * sideM.y;
-
-        vlM *= Math.pow(MODERN_SIDE_DAMP, warp);
-
-        me.data.xv = fwdM.x * vfM + sideM.x * vlM;
-        me.data.yv = fwdM.y * vfM + sideM.y * vlM;
-      }
-
-      // speed cap
-      var capM = MAX_SPEED;
-      if (usingNitro2) capM *= 1.5;
-      if (slipFactor > 0.001) capM *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
-
-      var spCap = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
-      if (spCap > capM && spCap > 1e-9) {
-        var scM = capM / spCap;
-        me.data.xv *= scM;
-        me.data.yv *= scM;
+    if (mode_enableNitro) {
+      if (nitroHeld && nitroArmed && !nitroLock && nitroFuel > 0) {
+        nitroActive = true;
+        nitroFuel -= NITRO_DRAIN * dtSec;
+        if (nitroFuel <= 0) {
+          nitroFuel = 0;
+          nitroLock = true;
+          nitroArmed = false;
+          nitroActive = false;
+        }
+      } else {
+        nitroFuel = Math.min(NITRO_MAX, nitroFuel + NITRO_REGEN * dtSec);
       }
     }
 
-    // substeps for collision stability
+    // Understeer scaling with speed
+    var sp0 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+    var steerScale = 1 / (1 + sp0 * TURN_SPEED_FALLOFF);
+
+    // Turn (classic)
+    me.data.dir += (me.data.steer / CLASSIC_TURN_DIV) * warp * steerScale;
+    me.data.dir = wrapAngle(me.data.dir);
+
+    // Throttle
+    var accel = SPEED;
+    if (nitroActive) accel *= NITRO_MULT;
+    if (mode_enableSlipstream && slipFactor > 0.001) accel *= (1.0 + SLIP_ACCEL_BONUS * slipFactor);
+
+    if (up) {
+      me.data.xv += Math.sin(me.data.dir) * accel * warp;
+      me.data.yv += Math.cos(me.data.dir) * accel * warp;
+    }
+    if (down) {
+      me.data.xv -= Math.sin(me.data.dir) * accel * 2.3 * warp;
+      me.data.yv -= Math.cos(me.data.dir) * accel * 2.3 * warp;
+    }
+
+    // Drag
+    var dragPow = Math.pow(0.99, warp);
+    me.data.xv *= dragPow;
+    me.data.yv *= dragPow;
+
+    // Speed cap (with MODERN bonuses only)
+    var cap = 0.40;
+    if (nitroActive) cap *= 1.6;
+    if (mode_enableSlipstream && slipFactor > 0.001) cap *= (1.0 + SLIP_TOPSPEED_BONUS * slipFactor);
+
+    var sp2 = Math.sqrt(me.data.xv * me.data.xv + me.data.yv * me.data.yv);
+    if (sp2 > cap && sp2 > 1e-9) {
+      var sc = cap / sp2;
+      me.data.xv *= sc;
+      me.data.yv *= sc;
+    }
+
+    // Substeps for collision stability
     var steps = Math.ceil(Math.max(Math.abs(me.data.xv), Math.abs(me.data.yv)) * 6);
     steps = Math.max(1, steps);
 
@@ -2373,7 +2111,7 @@
 
     handleCheckpoints();
 
-    // out of bounds
+    // OOB reset
     if (Math.sqrt(me.data.x * me.data.x + me.data.y * me.data.y) > OOB_DIST) {
       me.data.x = spawnX;
       me.data.y = spawnY;
@@ -2386,41 +2124,39 @@
       nitroActive = false;
     }
 
-    // apply to model
+    // Apply to model (visual yaw offset supported for GLTF)
     var yawOff = (me.model.userData && me.model.userData.yawOffset) ? me.model.userData.yawOffset : 0;
     me.model.position.x = me.data.x;
     me.model.position.z = me.data.y;
     me.model.rotation.y = me.data.dir + yawOff;
 
-    // wheel steer for built-in model only (children[2] & [3] are front wheels)
-    if (me.model.userData && me.model.userData.isBuiltIn) {
-      if (me.model.children && me.model.children.length >= 4) {
-        if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
-        if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
-      }
+    // Built-in wheel steer animation (front wheels = children[2], [3])
+    if (me.model.userData && me.model.userData.isBuiltIn && me.model.children && me.model.children.length >= 4) {
+      if (me.model.children[2]) me.model.children[2].rotation.z = Math.PI / 2 - me.data.steer;
+      if (me.model.children[3]) me.model.children[3].rotation.z = Math.PI / 2 - me.data.steer;
     }
   }
 
   function updateCamera(warp) {
     if (!me || !me.model) return;
 
-    var targetFov = nitroActive ? BOOST_FOV : BASE_FOV;
+    var targetFov = (mode_boostFov && nitroActive) ? BOOST_FOV : BASE_FOV;
     camera.fov = camera.fov * 0.88 + targetFov * 0.12;
     camera.updateProjectionMatrix();
 
-    // IMPORTANT: camera follows PHYSICS dir only (no yawOffset)
+    // Camera follows PHYSICS dir only (no yawOffset)
     var d = me.data.dir;
 
     var target = new THREE.Vector3(
       me.model.position.x + Math.sin(-d) * 5,
-      CAM_HEIGHT,
+      4,
       me.model.position.z + -Math.cos(-d) * 5
     );
 
     var lagPow = Math.pow(CAMERA_LAG, warp);
     camera.position.set(
       camera.position.x * lagPow + target.x * (1 - lagPow),
-      CAM_HEIGHT,
+      4,
       camera.position.z * lagPow + target.z * (1 - lagPow)
     );
 
@@ -2449,7 +2185,6 @@
   }
 
   function updateLabels() {
-    if (!camera) return;
     for (var k in players) {
       if (!players.hasOwnProperty(k)) continue;
       var p = players[k];
@@ -2484,28 +2219,9 @@
     me.ref.set(me.data);
   }
 
-  // ===== Nitro UI =====
-  function updateNitroUI() {
-    var barEl = document.getElementById("nitrobar");
-    var fillEl = document.getElementById("nitrofill");
-    var lblEl = document.getElementById("nitrolabel");
-    if (!barEl || !fillEl || !lblEl) return;
-
-    if (gameStarted) {
-      barEl.style.display = "block";
-      lblEl.style.display = "block";
-    } else {
-      barEl.style.display = "none";
-      lblEl.style.display = "none";
-    }
-
-    if (nitroActive) barEl.classList.add("active");
-    else barEl.classList.remove("active");
-
-    fillEl.style.width = ((nitroFuel / NITRO_MAX) * 100) + "%";
-  }
-
-  // ===== Main loop =====
+  // =========================
+  // ===== Render loop ========
+  // =========================
   var lastTime = 0;
 
   function renderLoop(ts) {
@@ -2514,8 +2230,8 @@
 
     var timepassed = ts - lastTime;
     lastTime = ts;
-
     timepassed = Math.min(timepassed, 50);
+
     var warp = timepassed / 16;
     var dtSec = timepassed / 1000;
 
@@ -2530,7 +2246,7 @@
       updateNitroUI();
       maybeSendToFirebase(ts);
     } else {
-      // menu idle camera
+      // idle camera in menu
       var a = ts * 0.0004;
       camera.position.set(50 * Math.sin(a), 20, 50 * Math.cos(a));
       camera.lookAt(new THREE.Vector3(0, 0, 0));
@@ -2538,7 +2254,6 @@
       slipTargetKey = null;
       slipFactor = 0;
       updateSlipstreamVisuals(ts);
-      updateNitroUI();
     }
 
     updateLabels();
@@ -2550,41 +2265,36 @@
   // =========================
   function init() {
     ensureEngine();
-
-    // allow UI clicks while in menu
-    if (foreEl) foreEl.style.pointerEvents = "auto";
-    if (foreEl && foreEl.style.display === "none") foreEl.style.display = "";
-
-    setupToolbarOnce();
     setupInputOnce();
     setupColorPickerOnce();
+    setupToolbarOnce();
 
-    buildMapFromTrackCode(getTrackCode());
+    // Capture the "original map" once (whatever was on the page at load)
+    originalMapCode = getTrackCode();
+    modernMapCode = originalMapCode;
 
+    // Default: ORIGINAL mode exactly (no nitro, built-in car, original map)
+    applyModeLocally(MODES.ORIGINAL);
+
+    // Start button -> mode menu
     if (startEl) startEl.onclick = showModeMenu;
 
-    animateMenuIn();
+    // Kick off loop
     requestAnimationFrame(renderLoop);
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+  else init();
 
-  // ===== Compatibility with your HTML inline onclick handlers =====
+  // Compatibility with older inline handlers (if your HTML calls these)
   window.menu2 = showModeMenu;
   window.host = hostFlow;
   window.joinGame = joinFlow;
-  window.codeCheck = function () { };
   window.updateColor = function (x01) { setSliderFrom01(x01); };
 
-  // Clean up firebase presence on close
+  // Cleanup
   window.addEventListener("beforeunload", function () {
-    try {
-      if (me && me.ref) me.ref.remove();
-    } catch (e) { }
+    try { if (me && me.ref) me.ref.remove(); } catch (e) {}
   });
 
 })();
